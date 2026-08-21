@@ -1,0 +1,12 @@
+# OS 产物
+.DS_Store
+Thumbs.db
+
+# 编辑器 / IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# pack.sh 的打包产物（单一来源是各 skill 目录本身）
+_dist/

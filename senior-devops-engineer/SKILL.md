@@ -282,6 +282,7 @@ volumes:
 
 | 领域 | 对应 Skill | 何时参考 |
 |------|-----------|---------|
+| Shell 脚本 | shell-scripting | 编写或审查部署/CI 脚本，涉及 set -euo pipefail、trap 清理、引用规则、macOS 与 Linux 工具差异时 |
 | OpenResty/Nginx Lua | senior-openresty-engineer | 涉及 OpenResty 网关开发、Lua 扩展、WAF 时 |
 | Go 后端服务 | senior-go-engineer | 涉及 Go 服务的构建、部署、性能调优时 |
 | PHP/Laravel | senior-php-engineer | 涉及 PHP 应用的部署、PHP-FPM 调优时 |

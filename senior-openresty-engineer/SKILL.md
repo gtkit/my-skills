@@ -179,12 +179,16 @@ return _M
 
 | API | init | init_worker | rewrite/access | content | header_filter | body_filter | log |
 |-----|------|-------------|----------------|---------|---------------|-------------|-----|
-| ngx.say/print | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| ngx.say/print | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
 | ngx.req.* | ✗ | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| cosocket | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| cosocket | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
 | ngx.shared.DICT | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | ngx.timer.at | ✗ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| ngx.sleep | ✗ | ✓ | ✓ | ✓ | ✗ | ✗ | ✗ |
+| ngx.sleep | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ |
+
+`init_worker` 本体禁用 cosocket 与 `ngx.sleep`（实测报
+`API disabled in the context of init_worker_by_lua*`），但它注册的 `ngx.timer` 回调里两者都可用——
+worker 启动时要拉远端配置就走 timer。具体代码模式见 openresty-patterns。
 
 ### 常见踩坑点
 
@@ -209,6 +213,7 @@ return _M
 
 | 领域 | 对应 Skill | 何时参考 |
 |------|-----------|---------|
+| OpenResty 代码模式 | openresty-patterns | 涉及执行阶段选择、共享字典、lrucache/lock 缓存、cosocket 复用、ngx.re、worker 阻塞排查时 |
 | Lua 语言基础 | senior-lua-engineer | 涉及 Lua 语法、metatable、coroutine 原理时 |
 | Redis 操作 | go-redis-patterns | 涉及 Redis 数据结构选型、Lua 脚本设计、分布式锁时 |
 | Go 后端 | senior-go-engineer | 涉及 OpenResty 与 Go 后端服务的配合架构时 |
