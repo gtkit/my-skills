@@ -25,7 +25,7 @@ fi
 
 for target in $TARGETS; do
     if [ ! -d "$target" ]; then
-        echo "跳过 $target：目录不存在" >&2
+        echo "跳过 ${target}：目录不存在" >&2
         continue
     fi
     n=0
@@ -39,5 +39,5 @@ for target in $TARGETS; do
             "$name/" "$target/$name/"
         n=$((n + 1))
     done
-    echo "$target：已同步 $n 个"
+    echo "${target}：已同步 ${n} 个"
 done
