@@ -356,6 +356,38 @@ function _M.set_user(u) ngx.ctx.user = u end
 `ngx.ctx` 每次访问走一次 metatable，热路径里先取到局部变量（同一请求内读到的是同一个 table，实测）。`ngx.location.capture`
 的子请求拿到**独立的空** `ngx.ctx`，子请求内写入不影响父请求（实测父值原样保留）；`ngx.exec` 跳转后 `ngx.ctx` 为空（实测）。跨跳转传值用 `ngx.var` 或请求头。
 
+### `require` 命中模块缓存：模块顶层的自动执行代码只跑一次
+
+`require` 在同一 worker 内对同一模块只加载一次，之后直接返回 `package.loaded` 里缓存的值，**不会重新执行 chunk**。常见于从独立脚本改造成模块的 WAF/限流代码——文件末尾习惯性留了一行顶层自动调用：
+
+```lua
+-- ❌ 模块尾部自动执行
+local _M = {}
+function _M.run() ... end
+_M.run()          -- 顶层调用；只在 chunk 第一次被加载时跑一次
+return _M
+```
+
+同一份代码，接入方式不同，效果完全不同（实测，OpenResty 1.27.1.2，连续 5 次请求）：
+
+| 接入方式 | `run()` 实际执行次数 |
+|---|---|
+| `access_by_lua_file waf.lua` | 5（每请求重新执行整个文件） |
+| `access_by_lua_block { require "waf" }` | **1**（`require` 命中缓存，chunk 只跑一次） |
+
+用 `require` 接入时，这段防护逻辑只在该 worker 生命周期里生效一次，此后所有请求全部放行，**且没有任何报错或日志**——看起来"装上了"，实际是摆设。
+
+```lua
+-- ✅ 模块只导出函数，不在顶层调用副作用代码
+local _M = {}
+function _M.run() ... end
+return _M
+```
+
+```nginx
+access_by_lua_block { require("waf").run() }
+```
+
 ## 审查清单
 
 - [ ] `log_by_lua` / `header_filter` / `body_filter` 里没有 cosocket、`ngx.sleep`、`ngx.req.read_body`
@@ -370,4 +402,5 @@ function _M.set_user(u) ngx.ctx.user = u end
 - [ ] 外部输入用 `cjson.safe` 解析；空数组用 `empty_array`/`empty_array_mt`；大整数走字符串
 - [ ] 无 `os.execute` / `io.popen` / 同步磁盘 IO / LuaSocket
 - [ ] 请求级状态在 `ngx.ctx`，模块级变量全部不可变
+- [ ] 模块顶层没有依赖被反复执行的副作用代码（`require` 命中缓存后只执行一次，`access_by_lua_file` 才每请求重跑）
 - [ ] 缓存空结果（字符串哨兵 + 短 TTL），防止不存在的 key 穿透

@@ -32,6 +32,7 @@ Lua 5.1/LuaJIT 2.1 与 Lua 5.3/5.4 是两套语义不同的运行时，回答前
 | 主题 | 5.1 / LuaJIT 2.1 | 5.3 / 5.4 |
 |---|---|---|
 | 数值 | 全部 double；`3/2 == 1.5`；`tostring(3.0) == "3"`（实测） | 整数与浮点子类型；`1 == 1.0` 但 `math.type` 不同；`tostring(3.0) == "3.0"`；`6/2 == 3.0`（浮点） |
+| `string.format("%d", 非整数)` | **静默截断，不报错**：`0.5→"0"`、`3.5→"3"`、`-3.5→"-3"`（向零截断，非 `floor`）；`1/0`、`-1/0`、`0/0`、`2^63` 全部静默给出 `"-9223372036854775808"`（实测，LuaJIT 2.1） | `pcall(string.format, "%d", 3.5)` 返回 `false, "number has no integer representation"`（实测） |
 | 整除/位运算 | 无 `//`（实测语法错误）；LuaJIT 用 `bit.band` 等 | `//` 向下取整；`&`、`~`、`<<`、`>>` 与按位或原生；`7 // 0` 报 `attempt to divide by zero`，`7.0 // 0` 得 `inf`（实测） |
 | 环境 | `setfenv`/`getfenv`，`_G` | `_ENV` upvalue；`load(..., env)` 替代 `setfenv` |
 | `goto` | LuaJIT 支持（实测） | 5.2+ |
@@ -54,6 +55,17 @@ print(math.tointeger(3.0), math.tointeger(3.5))      --> 3  nil
 print(2^2, math.floor(3.7))                          --> 4.0  3（幂运算恒为浮点，floor 返回整数）
 local t = {}; t[3] = "x"; print(t[3.0])              --> x（浮点键有整数值时归一为整数键）
 ```
+
+```lua
+-- 目标版本：LuaJIT 2.1（OpenResty 1.27.1.2 自带，实测输出写在注释里）
+print(string.format("%d", 0.5))     --> 0     （向零截断，不报错，与 5.3/5.4 的 pcall 报错完全相反）
+print(string.format("%d", -3.5))    --> -3
+print(string.format("%d", 1/0))     --> -9223372036854775808   （+inf，静默给出看似合法的垃圾值）
+print(string.format("%d", 0/0))     --> -9223372036854775808   （NaN，同上）
+print(string.format("%d", 2^63))    --> -9223372036854775808   （整数溢出回绕，同上）
+```
+
+用 5.3/5.4 的心智模型（"传非整数会 `pcall` 报错，能防住脏输入"）去写 OpenResty/LuaJIT 代码，这层防护完全不存在：`ban_ttl / 3600` 这类计算一旦分母意外为 0，或运算链路产生了 `NaN`/溢出，`string.format("%d", ...)` 不会报错、不会让 `pcall` 捕获到任何异常，只会吐出一个看起来合法的巨大负数，直接写进日志或响应里。需要整数语义时用 `math.floor`/`math.ceil` 显式取整，并在格式化前用 `n == n and n ~= math.huge and n ~= -math.huge` 排除 `NaN`/`Inf`。
 
 - JSON：LuaJIT 下 cjson 把 `3` 和 `3.0` 都编成 `3`；默认 14 位精度，`12345678901234567` 编成 `1.2345678901235e+16`（实测）——超过 14 位的整数 ID 一律按字符串传，或 `cjson.encode_number_precision(16)`（上限 16，仍不够 int64）。
 - 5.3+ 环境下序列化前用 `math.tointeger` 归一：从 `/` 得到的 `3.0` 直接编码可能输出 `3.0`，与协议约定的整数不符。
