@@ -1,258 +1,311 @@
 ---
 name: shell-scripting
-description: Shell 脚本工程化与跨平台陷阱库。当用户编写、审查或调试 Shell/Bash/sh 脚本，涉及 set -euo pipefail、trap 清理、变量引用、word splitting、数组、字符串处理、mktemp 临时文件、信号处理、退出码、管道错误传递，或遇到脚本在 macOS 与 Linux 上行为不一致（sed -i、date、stat、readlink、grep -P、xargs、bash 版本差异）时触发。触发关键词包括但不限于：shell 脚本、bash 脚本、sh 脚本、set -e、set -u、pipefail、trap、shellcheck、word splitting、IFS、mktemp、BSD sed、GNU sed、macOS 脚本、脚本兼容性、部署脚本、CI 脚本、退出码、$?、"$@"、局部变量、数组遍历。
+description: Shell 脚本工程化与跨平台陷阱库。当用户编写、审查或调试 Shell/Bash/sh 脚本，涉及 set -euo pipefail、trap 清理、变量引用、word splitting、数组、字符串处理、mktemp 临时文件、信号处理、退出码、管道错误传递、getopts 参数解析、单实例锁、shellcheck 静态检查，或遇到脚本在 macOS 与 Linux 上行为不一致（sed -i、date、stat、readlink、grep -P、xargs、flock、timeout、bash 3.2 与 4+/5 版本差异）时触发。触发关键词包括但不限于：shell 脚本、bash 脚本、sh 脚本、set -e、set -u、pipefail、trap、shellcheck、word splitting、IFS、mktemp、getopts、flock、BSD sed、GNU sed、macOS 脚本、脚本兼容性、部署脚本、CI 脚本、退出码、$?、"$@"、局部变量、数组遍历、unbound variable。分工：运维场景（容器、K8s、监控、故障排查）见 senior-devops-engineer，本 skill 只负责脚本本身怎么写对。
 ---
 
 # Shell 脚本工程化
 
-本文的行为结论均在 macOS（darwin22，`/bin/bash` 3.2.57、BSD 用户态工具）上实测得出，
-标注「实测」的即真实运行结果。
+本文行为结论在 macOS `/bin/bash` 3.2.57 + BSD 用户态工具上实测，标「实测」处为真实运行结果；给出的写法同时兼容 bash 3.2 与 5.x。
+
+## 核心规则
+
+1. `readonly`/`local`/`declare`/`export` 与 `$(...)` 不写在同一行——声明内建会吞掉命令替换的退出码。
+2. `set -e` 不进入 `$(...)`、不管 `&&`/`||` 列表、不管 `if`/`while` 条件里的命令——关键命令显式判断。
+3. `set -u` 下 bash 3.2 展开空数组 `"${arr[@]}"` 会报 `unbound variable`，用 `"${arr[@]+"${arr[@]}"}"`。
+4. `[ ]` 与普通命令参数一律加引号；`[[ ]]` 内不分词，`==`/`=~` 右侧加了引号就变字面量匹配。
+5. 清理只挂在 `EXIT` 一个 trap 上；信号 trap 里要么 `trap - EXIT` 要么重发信号，否则 cleanup 跑两次。
+6. `cmd | while read` 的循环体在子 shell 里，循环里改的变量外面看不到；用 `< <(cmd)` 或临时文件。
+7. `read` 必带 `-r`；要保留首尾空白再加 `IFS=`。
+8. 临时文件用 `mktemp`，且检查它的退出码；`rm -rf` 的变量用 `${var:?}` 兜底。
+9. 需要 bash 4+ 特性（关联数组、`mapfile`、`${var^^}`、`inherit_errexit`、`lastpipe`）就检查 `BASH_VERSINFO` 并报错退出，不要默默跑坏。
+10. 交付前过 `shellcheck`；没有 shellcheck 至少 `bash -n`。
 
 ## 脚本骨架
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-IFS=$'\n\t'                       # 去掉空格作为分隔符，杜绝路径带空格时的 word splitting
 
-# 脚本所在目录（不受调用者 cwd 影响）
-readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# 先赋值再 readonly：readonly X="$(cmd)" 的退出码来自 readonly，cmd 失败不会中止（实测）
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 
-# 清理：EXIT 覆盖正常退出与 set -e 退出；INT/TERM 处理信号
-readonly TMPDIR_="$(mktemp -d)"
-cleanup() {
-    local rc=$?                   # 必须第一行取，后续命令会覆盖 $?
-    rm -rf -- "$TMPDIR_"
-    exit "$rc"                    # 保留原始退出码
+# mktemp 失败（目录不存在/不可写）必须显式判断，否则拿着空串继续，后面 rm -rf -- "$WORK_DIR/" 就是 rm -rf /
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${0##*/}.XXXXXX")" || { echo "mktemp 失败" >&2; exit 1; }
+readonly WORK_DIR
+
+cleanup() { rm -rf -- "${WORK_DIR:?}"; }
+trap cleanup EXIT     # 正常退出、set -e 退出、Ctrl-C(130)、SIGTERM(143) 都会走这里，且只走一次（实测）
+
+main() {
+    echo "使用 $SCRIPT_DIR 与 $WORK_DIR"
 }
-trap cleanup EXIT INT TERM
+main "$@"
 ```
 
-三个开关的含义：`-e` 命令失败即退出，`-u` 引用未定义变量即报错，`-o pipefail` 管道中任一环失败即视为失败。
+三个开关：`-e` 命令失败即退出，`-u` 引用未定义变量即报错，`-o pipefail` 管道任一环失败即失败。
 
-`#!/usr/bin/env bash` 而不是 `#!/bin/sh`：**macOS 的 `/bin/sh` 实测是 `GNU bash 3.2.57` 的 sh 兼容模式**，
-它恰好支持 `pipefail`；但 Linux 上 `/bin/sh` 常是 dash，`set -o pipefail` 会直接失败。
-写 `#!/bin/sh` 就不能依赖 pipefail、数组、`[[ ]]`、`local`。
+不在骨架里设 `IFS=$'\n\t'`：实测它会把 `"$*"`、`"${arr[*]}"` 的连接符从空格变成换行，
+依赖默认 IFS 的 `read`/`$*` 全部变样；靠引号解决分词，不靠改 IFS。
+
+`#!/usr/bin/env bash` 而不是 `#!/bin/sh`：macOS 的 `/bin/sh` 实测是 bash 3.2 的 sh 兼容模式，恰好支持 `pipefail`；
+Linux 的 `/bin/sh` 常是 dash，`set -o pipefail`、数组、`[[ ]]`、`local` 都没有。
 
 ## set -e 会在哪些地方失效
 
-**这是 shell 最反直觉的部分。** 以下都是实测：
-
 ```bash
-# ✅ 正常触发：纯 set -e + 失败命令 → 脚本退出，退出码 1
 set -e
-false
-echo "不会执行"
+# 陷阱一：&& / || 列表和 if/while 条件里的命令，set -e 对它们以及它们调用的函数体都不生效
+f() { false; echo "f 内 false 后继续"; }
+f || true                         # 实测：echo 照样执行
+if f; then :; fi                  # 实测：同样继续
 
-# ❌ 陷阱一：命令处于 && / || 列表中时，set -e 对它不生效
-f() { false; echo "仍然执行了"; }
-f || true                         # 实测：函数内 false 之后的 echo 照样执行
-
-# ❌ 陷阱二：local/declare/export 的赋值
+# 陷阱二：声明内建 + 命令替换
 g() {
-    local x=$(false)              # 实测：不触发退出
-    echo "仍然执行了"
-}
-# 原因：退出码来自 local 本身，不是命令替换。要检查就拆开：
-g2() {
-    local x
-    x=$(false) || return 1        # 这样才捕获得到
+    local x=$(false)              # 实测：不退出，退出码是 local 的 0
+    readonly y="$(false)"         # 实测：同上
+    local z; z=$(false)           # ✅ 分两行，实测：退出
 }
 
-# ❌ 陷阱三：管道中段失败（未开 pipefail）
-false | true                      # 实测：不触发，$? 是最后一环的 0
-set -o pipefail
-false | true                      # 开了才触发
+# 陷阱三：$(...) 内部不继承 set -e
+x=$(false; echo "子 shell 继续")  # 实测：x="子 shell 继续"，外层也不退出
+# 修法：shopt -s inherit_errexit（bash 4.4+；3.2 实测报 invalid shell option name），
+# 或在子 shell 里显式写 set -e：x=$(set -e; false; echo no)
 
-# 预期行为（不算陷阱）：if / while 条件里的失败不触发
-if false; then :; fi              # 正常继续
+# 陷阱四：管道中段失败且未开 pipefail
+false | true                      # 实测：不退出；开 pipefail 后退出
+
+# 陷阱五：算术命令
+n=0; ((n++))                      # 表达式值为 0 → 退出码 1。bash 3.2 实测不退出，新版 bash 会退出——两边不同
+n=$((n+1))                        # ✅ 一律用赋值形式
 ```
 
-推论：**不要把 `set -e` 当安全网**。关键命令显式判断：
+推论：**`set -e` 是兜底不是安全网**，关键命令显式判断：`cmd || { echo "cmd 失败" >&2; exit 1; }`。
+
+`ERR` trap 在 bash 3.2 就有（实测），适合统一打点，`$BASH_COMMAND` 是出错的那条命令：
 
 ```bash
-if ! some_command; then
-    echo "some_command 失败" >&2
-    exit 1
-fi
-
-# 或者
-some_command || { echo "失败" >&2; exit 1; }
+trap 'echo "失败: $BASH_COMMAND (行 $LINENO)" >&2' ERR
 ```
 
 ## 引用：不加引号就是 bug
 
-未加引号的变量会经历 word splitting 和 glob 展开两道处理：
+未加引号的变量要经历 word splitting 与 glob 展开两道处理：
 
 ```bash
-file="my report.txt"
-rm $file                          # ❌ 展开成 rm my report.txt —— 删错两个文件
-rm "$file"                        # ✅
+file="my report.txt"; rm $file    # ❌ 变成 rm my report.txt
+rm -- "$file"                     # ✅  -- 防止以 - 开头的文件名被当选项
 
-pattern="*.txt"
-echo $pattern                     # ❌ 被 glob 展开成实际文件名
-echo "$pattern"                   # ✅ 输出 *.txt
+pattern="*.txt"; echo $pattern    # ❌ 被 glob 展开成文件名
+for a in "$@"; do echo "[$a]"; done   # ✅ "$@" 保留参数边界；$* 会重新分词
 
-# "$@" 与 $* 的区别：前者保留每个参数的边界
-for a in "$@"; do echo "[$a]"; done      # ✅ 逐个参数
-for a in $*;  do echo "[$a]"; done       # ❌ 全部重新分词
-
-# 命令替换同样要引号
-files="$(find . -name '*.go')"    # 多行结果，遍历时要配合 IFS 或改用 -print0
+x="a b"
+[ $x == "a b" ]                   # ❌ 实测：[: too many arguments
+[[ $x == "a b" ]]                 # ✅ 实测匹配：[[ ]] 内部不做 word splitting
 ```
 
-规则：**除了刻意要分词或 glob，所有 `$var` 都写 `"$var"`**。数字比较、`[[ ]]` 内部也照样加。
-
-处理文件名一律用 `-print0` / `-d ''`，别指望 IFS：
+`[[ ]]` 右侧的引号决定的是**匹配语义**而不是安全（实测）：
 
 ```bash
-# ✅ 能处理任何文件名，包括含空格、换行、引号
+x=foo.txt; p='*.txt'
+[[ $x == $p ]]                    # 匹配（glob）
+[[ $x == "$p" ]]                  # 不匹配：加引号后 * 是字面量
+re='^[a-z]+[0-9]+$'
+[[ abc123 =~ $re ]]               # 匹配（正则，正则放变量里再引用，避免转义地狱）
+[[ abc123 =~ "$re" ]]             # 不匹配：加引号后整串是字面量
+```
+
+规则：`[[ ]]` 左侧加不加都行，右侧想要 glob/正则就不要加引号，想要字面量相等就加。
+
+文件名遍历一律 `-print0` / `read -d ''`：
+
+```bash
 while IFS= read -r -d '' f; do
     process "$f"
 done < <(find . -name '*.log' -print0)
 ```
 
-`--` 终止选项解析，防止以 `-` 开头的文件名被当成参数：`rm -- "$f"`、`grep -- "$pat" file`。
+## 数组与 set -u（bash 3.2 高频崩溃点）
+
+```bash
+set -u
+arr=()
+for a in "${arr[@]}"; do :; done          # ❌ bash 3.2 实测：arr[@]: unbound variable 并终止；4.4 起才修复
+for a in "${arr[@]+"${arr[@]}"}"; do :; done   # ✅ 实测：空数组零次循环，有元素时保留 "x y" 边界
+(( ${#arr[@]} == 0 )) && echo 空           # ✅ ${#arr[@]} 在空数组上不报错（实测）
+
+cmd=(sed)
+if sed --version >/dev/null 2>&1; then cmd+=(-i); else cmd+=(-i ''); fi
+"${cmd[@]}" 's/a/b/' file                  # 数组是唯一安全的"拼命令行"方式，不要 eval 拼字符串
+```
+
+## 管道、子 shell 与 read
+
+```bash
+n=0
+printf 'a\nb\n' | while read -r l; do n=$((n+1)); done
+echo "$n"                                  # 实测：0——while 在管道子 shell 里，变量改了外面看不到
+while read -r l; do n=$((n+1)); done < <(printf 'a\nb\n')
+echo "$n"                                  # 实测：2（进程替换，循环体在当前 shell）
+# shopt -s lastpipe 也能解，但 bash 4.2+ 才有（3.2 实测 invalid shell option name）
+
+x=$(printf 'a\n\n\n'); printf '%s' "$x" | od -c    # 实测：只剩 a——$(...) 吞掉全部尾部换行
+x=$(printf 'a\n\n\n'; printf x); x=${x%x}          # 需要保留时加哨兵再去掉
+
+printf 'a\\tb\n' | { read l; echo "$l"; }          # 实测：atb——不加 -r 反斜杠被吃掉
+printf '  s  \n' | { read -r l; echo "[$l]"; }     # 实测：[s]——默认 IFS 会裁掉首尾空白
+printf '  s  \n' | { IFS= read -r l; echo "[$l]"; } # 实测：[  s  ]
+```
+
+`if ! cmd | grep -q x` 这种管道里 `grep -q` 提前退出会让 `cmd` 收到 SIGPIPE；开了 pipefail 就是非零，要么接受要么 `cmd > "$tmp"; grep -q x "$tmp"`。
+
+## trap 与信号
+
+```bash
+# ❌ 常见写法：cleanup 跑两次（实测）——INT 触发 cleanup，里面的 exit 又触发 EXIT，再跑一遍
+cleanup() { rc=$?; rm -rf -- "$tmp"; exit "$rc"; }
+trap cleanup EXIT INT TERM
+
+# ✅ 写法一（推荐）：只挂 EXIT。实测 SIGTERM → cleanup 一次、退出码 143；Ctrl-C → 一次、130
+trap cleanup EXIT
+
+# ✅ 写法二：信号要做专门动作时，先解除 EXIT 再退出，退出码 128+信号号
+trap 'trap - EXIT; cleanup; exit 130' INT
+trap 'trap - EXIT; cleanup; exit 143' TERM
+
+# ✅ 写法三：清理后以同一信号自杀，父进程能看到"被信号杀死"而不是 exit 码（实测退出码同为 130/143）
+for s in INT TERM; do trap "trap - $s EXIT; cleanup; kill -s $s \$\$" "$s"; done
+```
+
+EXIT trap 里 `$?` 是脚本的最终退出码，`set -e` 触发时也是（实测 `return 3` → 3）；cleanup 第一行取，后面的命令会覆盖。
+
+`kill -INT <脚本 pid>` 不一定停得住脚本：实测 bash 正在等前台子进程（如 `sleep`）时，子进程没被中断则 bash 继续往下跑。
+要停脚本发 `TERM`，或对进程组发 `kill -INT -- -<pgid>`（Ctrl-C 就是这样）。
+
+## 参数解析：getopts
+
+```bash
+usage() { printf 'usage: %s [-n] [-e env] -f file [--] args...\n' "${0##*/}" >&2; exit 64; }
+dry_run=0 env=prod file=
+while getopts ':ne:f:h' opt; do          # 前导 : 让缺参数走 :) 分支而不是打印内建错误
+    case $opt in
+        n) dry_run=1 ;;
+        e) env=$OPTARG ;;
+        f) file=$OPTARG ;;
+        h) usage ;;
+        :) printf '选项 -%s 缺少参数\n' "$OPTARG" >&2; usage ;;
+        \?) printf '未知选项 -%s\n' "$OPTARG" >&2; usage ;;
+    esac
+done
+shift $((OPTIND - 1))
+[[ -n $file ]] || usage
+```
+
+实测：`-n -e dev -f a.txt x y` 解析正确、`-f` 缺参数与 `-z` 未知选项均走 usage 退出 64。
+`getopts` 只支持短选项；要 `--long` 就手写 `while [[ $# -gt 0 ]]; case $1 in --file) file=$2; shift 2 ;;` 循环。
+
+## 单实例锁与超时
+
+```bash
+# flock 只有 Linux 有（macOS 实测无 flock）。可移植的锁用 mkdir 的原子性（实测第二次 mkdir 失败 rc=1）
+lock=/tmp/${0##*/}.lock
+if ! mkdir -- "$lock" 2>/dev/null; then echo "已有实例在跑" >&2; exit 1; fi
+trap 'rmdir -- "$lock"' EXIT                    # 进程被 kill -9 会留下死锁目录，需运维手动删；flock 没这问题
+
+# timeout 命令 macOS 实测无（coreutils 的叫 gtimeout，需 brew）。可移植写法：
+perl -e 'alarm shift; exec @ARGV' 5 some_cmd    # 实测超时后进程被 SIGALRM 杀，退出码 142
+```
+
+Linux 上优先 `flock -n "$lockfile" cmd` 或 `exec 9>"$lockfile"; flock -n 9 || exit 1`（进程退出即释放）和 `timeout -k 5 30 cmd`。
 
 ## macOS/BSD 与 Linux/GNU 的差异
 
-本机实测（`/usr/bin/*` 为 BSD 版本）：
-
 | 操作 | BSD / macOS | GNU / Linux | 可移植写法 |
 |------|-------------|-------------|-----------|
-| 原地编辑 | `sed -i '' 's/a/b/' f`（**`-i` 后必须给参数**，实测无参数直接失败） | `sed -i 's/a/b/' f` | 写临时文件再 `mv`，或 `perl -i -pe` |
-| 日期解析 | `date -j -f '%Y-%m-%d' '2026-01-01' +%s`（实测 `date -d` **不可用**） | `date -d '2026-01-01' +%s` | 传 epoch 秒，或用 python3 |
-| 文件大小 | `stat -f '%z' f`（实测 `stat -c` **不可用**） | `stat -c '%s' f` | `wc -c < f` |
-| PCRE 正则 | `/usr/bin/grep -P` 实测**不可用** | `grep -P` 可用 | `grep -E`（ERE），或 `perl -ne` |
-| 绝对路径 | `readlink -f` 实测**可用**（近年 macOS 已支持） | 可用 | `cd -- "$(dirname "$f")" && pwd` |
-| 空输入不执行 | `xargs -r` 实测**可用**（BSD 空输入本就不执行） | 需要 `-r` | 加 `-r` 两边都安全 |
-| 就地排序 | `sort -o f f` 两边都可用 | 同 | — |
+| 原地编辑 | `sed -i '' 's/a/b/' f`（`-i` 后必须给参数，实测无参数失败） | `sed -i 's/a/b/' f` | 写临时文件再 `mv`，或 `perl -i -pe` |
+| 日期解析 | `date -j -f '%Y-%m-%d' '2026-01-01' +%s`（实测无 `-d`） | `date -d '2026-01-01' +%s` | 传 epoch 秒 |
+| 文件大小 | `stat -f '%z' f`（实测无 `-c`） | `stat -c '%s' f` | `wc -c < f` |
+| PCRE 正则 | `/usr/bin/grep -P` 实测不可用 | `grep -P` | `grep -E`，或 `perl -ne` |
+| 绝对路径 | `readlink -f` macOS 12.3+ 可用 | 可用 | `cd -- "$(dirname -- "$f")" && pwd` |
+| 空输入不执行 | `xargs -r` 可用（BSD 空输入本就不执行） | 需 `-r` | 加 `-r` |
+| 文件锁 / 超时 | 无 `flock`、无 `timeout` | 有 | 见上节 |
 
-判断当前环境，而不是猜：
-
-```bash
-if sed --version >/dev/null 2>&1; then
-    SED_INPLACE=(-i)              # GNU
-else
-    SED_INPLACE=(-i '')           # BSD
-fi
-sed "${SED_INPLACE[@]}" 's/a/b/' file
-```
-
-**注意本机的 `grep` 不是 BSD grep**：实测 `command -v grep` 指向 `ugrep 7.8.4`，它支持 `-P`。
-写脚本时不能依赖这一点——别人的机器上 `grep` 大概率是 BSD 或 GNU 版本。
+判断环境用能力探测，不用 `uname`：`if sed --version >/dev/null 2>&1; then GNU_SED=1; fi`。
 
 ## macOS 自带 bash 是 3.2
 
-实测 `/bin/bash --version` → `3.2.57`。以下 bash 4+ 特性在它上面**全部不可用**（实测）：
+以下 bash 4+ 特性在 3.2 上全部不可用（实测报错）：`declare -A`、`${var^^}`/`${var,,}`、`mapfile`/`readarray`、
+`shopt -s inherit_errexit`（4.4）、`shopt -s lastpipe`（4.2）、`${var@Q}`（4.4）、`printf '%(%F)T'`（4.2）。
 
 ```bash
-declare -A map                    # ❌ 关联数组
-echo "${var^^}"                   # ❌ 大小写转换
-mapfile -t arr < file             # ❌ mapfile / readarray
-```
+lookup() { case "$1" in dev) echo 127.0.0.1 ;; prod) echo 10.0.0.1 ;; *) return 1 ;; esac; }   # 替代关联数组
+upper="$(printf '%s' "$var" | tr '[:lower:]' '[:upper:]')"                                      # 替代 ${var^^}
+arr=(); while IFS= read -r line; do arr+=("$line"); done < file                                 # 替代 mapfile
 
-替代：
-
-```bash
-# 关联数组 → 用两个平行数组，或 case，或外部工具
-lookup() {
-    case "$1" in
-        dev)  echo "127.0.0.1" ;;
-        prod) echo "10.0.0.1"  ;;
-        *)    return 1 ;;
-    esac
-}
-
-# ${var^^} → tr
-upper="$(printf '%s' "$var" | tr '[:lower:]' '[:upper:]')"
-
-# mapfile → while read 循环
-arr=()
-while IFS= read -r line; do arr+=("$line"); done < file
-```
-
-要用 bash 4+ 特性，就在脚本开头显式检查并给出可操作的错误：
-
-```bash
 if (( BASH_VERSINFO[0] < 4 )); then
-    echo "需要 bash 4+，当前 $BASH_VERSION；macOS 请 brew install bash" >&2
-    exit 1
+    echo "需要 bash 4+，当前 ${BASH_VERSION}；macOS 请 brew install bash" >&2; exit 1
 fi
 ```
 
-## 路径拼接与 cp/rsync 的尾斜杠
+3.2 专有坑：`$VAR` 后面直接跟中文标点时，多字节字符会被并进变量名——`echo "当前 $BASH_VERSION；"` 在 `set -u` 下
+报 `unbound variable` 并终止（实测；bash 5 正常）。变量后紧跟非 ASCII 字符一律写 `${VAR}`。
 
-**BSD `cp -R` 对尾斜杠敏感**，这条实测过，而且是高频线上事故来源：
+## 路径拼接与 cp 的尾斜杠
 
-```bash
-mkdir -p src dst; echo hi > src/f.txt
-
-cp -R src/ dst/     # 实测：dst/f.txt      ← 复制的是「内容」
-cp -R src  dst/     # 实测：dst/src/f.txt  ← 复制的是「目录本身」
-```
-
-想要 `dst/src/`，源路径**不能带尾斜杠**。用 glob（`cp -R src/*/ dst/`）时尤其危险：
-`*/` 展开出的每一项都自带尾斜杠，于是全部内容被倒进同一层、互相覆盖。
+BSD `cp -R` 对尾斜杠敏感（实测）：`cp -R src/ dst/` 得到 `dst/f.txt`（内容），`cp -R src dst/` 得到 `dst/src/f.txt`（目录本身）。
+`cp -R src/*/ dst/` 展开出的每一项自带尾斜杠，全部内容倒进同一层互相覆盖。
 
 ```bash
-# ✅ 稳妥写法：逐个显式建同名子目录
-for d in src/*/; do
-    name="$(basename -- "$d")"
-    cp -R -- "src/$name" "dst/$name"
-done
-
-# ✅ 或者用 rsync，语义明确（尾斜杠 = 内容，无尾斜杠 = 目录本身，且跨平台一致）
-rsync -a src/ dst/                # 内容
-rsync -a src  dst/                # 目录本身
+for d in src/*/; do name="$(basename -- "$d")"; cp -R -- "src/$name" "dst/$name"; done
+rsync -a src/ dst/     # rsync 语义两边一致：尾斜杠 = 内容，无尾斜杠 = 目录本身
 ```
 
-## 临时文件
+## 临时文件与危险删除
 
 ```bash
-# ✅ mktemp 两边都支持 -d，且模板必须以至少 6 个 X 结尾（若自带模板）
-tmp="$(mktemp -d)"
-tmpf="$(mktemp "${TMPDIR:-/tmp}/myscript.XXXXXX")"
-trap 'rm -rf -- "$tmp" "$tmpf"' EXIT
+tmpf="$(mktemp "${TMPDIR:-/tmp}/myscript.XXXXXX")" || exit 1   # 模板末尾至少 3 个 X 即可（macOS 实测 XXX 可用，GNU 同）；写 6 个是习惯不是要求
+tmp=/tmp/myscript.tmp                                          # ❌ 固定名：可预测路径 = 符号链接攻击 + 并发互相覆盖
 
-# ❌ 固定名字：可预测路径 = 符号链接攻击 + 并发互相覆盖
-tmp=/tmp/myscript.tmp
+rm -rf -- "${dir:?dir 未设置或为空}/"    # 实测空值时报错退出（rc 非 0），而不是 rm -rf /
 ```
 
-`rm -rf` 的变量必须确保非空——`set -u` 能挡住未定义，但挡不住空串：
-
-```bash
-rm -rf -- "${dir:?dir 未设置或为空}"/   # 空值时直接报错退出，而不是删掉 /
-```
+`printf '%q' "$v"` 用于把值安全地拼进要 `ssh`/`eval` 的命令串（实测 `a b;rm -rf /` → `a\ b\;rm\ -rf\ /`）。
 
 ## 退出码与错误输出
 
-```bash
-# 错误信息一律进 stderr，否则会污染被调用方解析的 stdout
-echo "配置缺失" >&2
+- 错误信息进 stderr：`echo "配置缺失" >&2`；stdout 留给被调用方解析。
+- 保留退出码：`cmd; rc=$?` 立刻存，任何后续命令都会覆盖 `$?`。
+- 约定：0 成功、1 一般错误、2 用法错误（bash 内建也用 2）、64 用法错误（sysexits）、126 不可执行、127 命令不存在、128+n 信号（130=INT，143=TERM）。
+- 函数用 `return`，脚本用 `exit`；函数里 `exit` 会终止整个脚本。
 
-# 保留原始退出码：任何命令都会覆盖 $?
-some_command
-rc=$?                             # 立刻存
-log "退出码 $rc"                   # log 会覆盖 $?
-exit "$rc"
+## 静态检查
 
-# 信号退出码约定：128 + 信号号（SIGINT=130, SIGTERM=143）
-```
+- 有 `shellcheck`：`shellcheck -s bash -S warning script.sh`，CI 里对所有 `*.sh` 跑；忽略必须逐行 `# shellcheck disable=SC2034` 并写原因。
+- 无 shellcheck：`bash -n script.sh` 只查语法，查不出引号与 set -e 问题，仍要人工过审查清单。
+- 兼容性验证跑真实的 `/bin/bash`（3.2）和目标 Linux 的 bash 各一遍，不要只在 brew 的 bash 5 上测。
 
-函数用 `return`，脚本用 `exit`。函数里写 `exit` 会终止整个脚本，调用方无法处理。
+## 何时不该用 Shell
+
+| 场景 | 选择 | 理由 |
+|------|------|------|
+| 超过 ~200 行、需要数据结构、要单测 | Python / Go | bash 没有真正的数据结构与错误类型，测试成本高 |
+| 解析 JSON/YAML | `jq` / `yq`，或换语言 | 正则拼 JSON 必出错 |
+| 并发任务编排 | Go / Python asyncio，或 `xargs -P` 做简单并行 | bash 的 `&`+`wait` 没有错误汇聚 |
+| 需要在 sh 与 bash 间可移植 | 严格 POSIX sh（无数组、无 `[[`、无 `local`、无 pipefail） | 或干脆要求 bash |
 
 ## 审查清单
 
-- [ ] `set -euo pipefail` 齐全，且 shebang 是 `bash` 而非 `sh`（要 sh 就不用 pipefail/数组/`[[ ]]`）
-- [ ] 所有 `$var` 加引号，包括 `"$@"`、`"${arr[@]}"`
-- [ ] 关键命令显式判断失败，不依赖 `set -e`（尤其在 `||`/`&&` 列表和 `local x=$(...)` 中）
-- [ ] `trap ... EXIT` 清理临时文件，且 cleanup 第一行就存 `$?`
-- [ ] 临时文件用 `mktemp`，不用固定路径
-- [ ] `rm -rf` 的变量用 `${var:?}` 兜底
-- [ ] 文件名遍历用 `-print0` + `read -r -d ''`
-- [ ] `--` 终止选项解析
-- [ ] `sed -i` / `date` / `stat` / `grep -P` 做了平台判断，或改用可移植写法
-- [ ] 未使用 bash 4+ 特性，或已做 `BASH_VERSINFO` 版本检查
-- [ ] `cp -R` 的源路径尾斜杠语义确认过（要目录本身就不能带 `/`）
-- [ ] 错误信息进 stderr，退出码有意义
+- [ ] `set -euo pipefail` 齐全，shebang 是 `bash`；要 sh 就不用 pipefail/数组/`[[ ]]`/`local`
+- [ ] 没有 `readonly/local/declare/export X="$(...)"`，全部拆成两行
+- [ ] `mktemp` 的返回值有判断；`rm -rf` 的变量用 `${var:?}` 兜底
+- [ ] 所有 `$var`、`"$@"` 加引号；`[[ ]]` 右侧的引号符合意图（glob/正则不加、字面量加）
+- [ ] 空数组在 `set -u` 下用 `"${arr[@]+"${arr[@]}"}"`，或先判 `${#arr[@]}`
+- [ ] 关键命令显式判断失败，不依赖 `set -e`（尤其 `||`/`&&` 列表、`$(...)`、`if` 条件里的函数）
+- [ ] 只有一个 `trap ... EXIT` 负责清理；信号 trap 里 `trap - EXIT` 或重发信号；cleanup 第一行取 `$?`
+- [ ] 没有 `cmd | while read` 改外层变量；`read` 带 `-r`，需要保留空白时加 `IFS=`
+- [ ] 文件名遍历用 `-print0` + `read -r -d ''`；`--` 终止选项解析
+- [ ] `sed -i` / `date` / `stat` / `grep -P` / `flock` / `timeout` 做了能力探测或改用可移植写法
+- [ ] 未用 bash 4+ 特性，或已做 `BASH_VERSINFO` 检查并给出安装指引；变量后紧跟中文标点的写成 `${VAR}`
+- [ ] `cp -R` 源路径尾斜杠语义确认过
+- [ ] 错误信息进 stderr，退出码有意义（用法错误 2/64，信号 128+n）
+- [ ] 过了 `shellcheck`（无则 `bash -n`），disable 注释都写了原因

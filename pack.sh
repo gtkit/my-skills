@@ -31,7 +31,7 @@ for name in "$@"; do
         continue
     fi
     rm -f "$DIST/$name.skill"
-    zip -q -D -r "$DIST/$name.skill" "$name"
+    zip -q -D -r "$DIST/$name.skill" "$name" -x "$name/.DS_Store"
     echo "  $DIST/$name.skill"
     n=$((n + 1))
 done

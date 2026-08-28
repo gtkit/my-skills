@@ -56,6 +56,23 @@ If catchup report shows unsynced context:
 | Skill directory (`${CLAUDE_PLUGIN_ROOT}/`) | Templates, scripts, reference docs |
 | Your project directory | `task_plan.md`, `findings.md`, `progress.md` |
 
+### Keep planning files out of version control (mandatory)
+
+Planning files are working artifacts, never repository content. When the project directory is a git repository, run this **before** creating the three files:
+
+```bash
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  ex="$(git rev-parse --git-dir)/info/exclude"
+  for f in task_plan.md findings.md progress.md; do
+    grep -qxF "$f" "$ex" 2>/dev/null || echo "$f" >> "$ex"
+  done
+fi
+```
+
+- The rule goes only into the local, untracked `.git/info/exclude` — **never into the tracked `.gitignore`** (a tracked ignore rule would itself leak the tooling into the repository).
+- If any of the three files is already tracked, remove it from the index first (`git rm --cached <file>`) and then add the exclude entry.
+- Before finishing a task, confirm with `git status --porcelain` that none of the three files shows up as untracked or modified.
+
 ## Quick Start
 
 Before ANY complex task:

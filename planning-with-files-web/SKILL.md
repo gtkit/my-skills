@@ -193,6 +193,19 @@ cp /home/claude/task_plan.md /home/claude/findings.md /home/claude/progress.md /
 
 The user can then upload these files in the next session to resume.
 
+### Never let planning files enter a repository
+
+Planning files live in `/home/claude/`, outside any project checkout. If a task requires writing them inside a git working tree (for example, the user asks for the plan next to the code), add them to the local, untracked exclude list first — never to the tracked `.gitignore`:
+
+```bash
+ex="$(git rev-parse --git-dir)/info/exclude"
+for f in task_plan.md findings.md progress.md; do
+  grep -qxF "$f" "$ex" 2>/dev/null || echo "$f" >> "$ex"
+done
+```
+
+Confirm with `git status --porcelain` before delivering that none of the three files is untracked or modified.
+
 ## Anti-Patterns
 
 | Don't | Do Instead |

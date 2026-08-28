@@ -1,582 +1,400 @@
 ---
 name: go-testing
-description: Go testing best practices including table-driven tests, mocks, benchmarks, integration tests, and test fixtures. Use this skill whenever the user mentions Go testing, writing tests in Go, test coverage, benchmarking Go code, mocking dependencies, testify usage, httptest, or any test-related development in Go. Also trigger when the user asks about TDD in Go, test organization, golden files, or test helper patterns.
+description: Go 测试工程实践：表驱动 + t.Parallel、go-cmp/testify/标准库断言取舍、fake/stub/mock 替身选择与 mockery 生成、Gin handler 与出站 HTTP 测试、testcontainers 集成测试隔离、接口契约测试、-race/goleak/testing/synctest 并发测试、Fuzz、golden 文件、b.Loop 基准与 CI 参数。当用户提到 Go testing、写单测、testify、mock、mockery、httptest、testcontainers、fuzz、benchmark、golden、覆盖率、flaky 测试时触发。与 go-enterprise-quality 的分工：那个 skill 定义交付前的质量门禁，本 skill 给出具体测试写法与工具选型。
 ---
 
-# Go Testing Best Practices
+# Go 测试工程实践
 
-Production patterns for testing Go applications including unit tests, integration tests, benchmarks, and mocking strategies.
+单元、集成、并发、模糊、基准测试的写法与工具选型。现代语法以 `use-modern-go` 为准；并发原语本身见 `go-concurrency`；数据库驱动/ORM 见 `go-database-patterns`。
 
-## When to Use This Skill
+## 核心规则
 
-- Writing unit and integration tests in Go
-- Table-driven test patterns
-- Mocking interfaces with testify or gomock
-- HTTP handler testing with httptest
-- Benchmark and performance testing
-- Test fixtures and golden files
-- Coverage analysis and improvement
+1. 测试内一律 `t.Context()`（Go 1.24），它在 Cleanup 运行前被取消；Cleanup 里要用 ctx 的操作（回滚、关连接）用 `context.WithoutCancel(t.Context())`。
+2. 错误断言只用 `errors.Is` / `errors.AsType[T]`，不比对 `err.Error()` 字符串——上游改一个字，测试就红。
+3. 含 `time.Time` 的结构体不用 `reflect.DeepEqual` / `assert.Equal` 直接比：`time.Now()` 带 monotonic 读数，序列化再反序列化后就不相等。用 `cmp.Diff` + `cmpopts.EquateApproxTime`。
+4. `t.Parallel()` 与 `t.Setenv` / `t.Chdir` 互斥（两者都改整个进程的状态）：同一测试里两者并用直接 panic，文案为 `testing: test using t.Setenv, t.Chdir, or cryptotest.SetGlobalRandom can not use t.Parallel`（Go 1.27 源码常量 parallelConflict）。
+5. 缺外部环境时 `t.Skip` 等于假绿：CI 里必须失败。用 `//go:build integration` 标签决定跑不跑，不用运行时 skip。
+6. 集成测试的隔离单位是"一个测试一个事务（结束回滚）"或"一个测试一个 schema"，禁止共享一张表再靠 `DELETE ... LIKE 'test-%'` 清理。
+7. Handler 测试必须走生产同一个路由装配函数（含错误中间件）；裸 `gin.New()` + handler 会把错误路径测成 200。
+8. 契约声明（幂等、有界、线程安全）必须有"若为假就失败"的测试，且该测试在 `-race` 下跑。
 
-## Core Patterns
+## 现代 testing API 速查
 
-### 1. Table-Driven Tests
+| API | 版本 | 用途 |
+|---|---|---|
+| `t.Context()` | 1.24 | 随测试结束取消的 ctx，替代 `context.Background()` |
+| `for b.Loop()` | 1.24 | 自动排除 setup、防止结果被优化掉；不与 `b.N` 循环混用 |
+| `t.Attr(k, v)` / `t.Output()` | 1.25 | 输出 CI 可解析的键值属性；返回与 `t.Log` 同流、带缩进的 `io.Writer` |
+| `testing/synctest` | 1.25 | 假时钟气泡，替代 `time.Sleep` 等待（见并发测试节） |
+
+## 表驱动 + t.Parallel + 断言
 
 ```go
-package calculator
-
-import "testing"
-
-func TestAdd(t *testing.T) {
-    tests := []struct {
-        name     string
-        a, b     int
-        expected int
-    }{
-        {"positive numbers", 2, 3, 5},
-        {"negative numbers", -1, -2, -3},
-        {"mixed", -1, 5, 4},
-        {"zeros", 0, 0, 0},
-        {"large numbers", 1000000, 2000000, 3000000},
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            result := Add(tt.a, tt.b)
-            if result != tt.expected {
-                t.Errorf("Add(%d, %d) = %d, want %d", tt.a, tt.b, result, tt.expected)
-            }
-        })
-    }
+func TestParseAmount(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		in      string
+		want    int64
+		wantErr error // nil 表示期望成功；非 nil 用 errors.Is 断言，不比对字符串
+	}{
+		{name: "integer", in: "7", want: 700},
+		{name: "two decimals", in: "12.34", want: 1234},
+		{name: "negative", in: "-0.05", want: -5},
+		{name: "empty", in: "", wantErr: amount.ErrEmpty},
+		{name: "double minus", in: "--5", wantErr: amount.ErrSyntax},
+		{name: "three decimals", in: "1.234", wantErr: amount.ErrPrecision},
+	}
+	for _, tt := range tests { // Go 1.22 起每轮迭代变量独立，不需要 tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := amount.ParseAmount(tt.in)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ParseAmount(%q) error = %v, want %v", tt.in, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("ParseAmount(%q) = %d, want %d", tt.in, got, tt.want)
+			}
+		})
+	}
 }
 ```
 
-### 2. Table-Driven Tests with Error Cases
+`errors.Is(nil, nil)` 为 true，成功与失败用例共用一个分支；`t.Fatal` 用于前置条件，`t.Error` 用于并列断言。
 
 ```go
-func TestParseConfig(t *testing.T) {
-    tests := []struct {
-        name    string
-        input   string
-        want    *Config
-        wantErr bool
-        errMsg  string
-    }{
-        {
-            name:  "valid config",
-            input: `{"host":"localhost","port":8080}`,
-            want:  &Config{Host: "localhost", Port: 8080},
-        },
-        {
-            name:    "invalid json",
-            input:   `{invalid}`,
-            wantErr: true,
-            errMsg:  "invalid character",
-        },
-        {
-            name:    "missing required field",
-            input:   `{"host":"localhost"}`,
-            wantErr: true,
-            errMsg:  "port is required",
-        },
-        {
-            name:  "empty input uses defaults",
-            input: `{}`,
-            want:  &Config{Host: "0.0.0.0", Port: 3000},
-        },
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            got, err := ParseConfig([]byte(tt.input))
-
-            if tt.wantErr {
-                if err == nil {
-                    t.Fatal("expected error, got nil")
-                }
-                if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
-                    t.Errorf("error = %q, want containing %q", err.Error(), tt.errMsg)
-                }
-                return
-            }
-
-            if err != nil {
-                t.Fatalf("unexpected error: %v", err)
-            }
-
-            if !reflect.DeepEqual(got, tt.want) {
-                t.Errorf("got %+v, want %+v", got, tt.want)
-            }
-        })
-    }
+func TestReceipt_Diff(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	want := Receipt{Cents: 1234, CreatedAt: now}
+	got := Receipt{Cents: 1234, CreatedAt: now.Add(3 * time.Millisecond)}
+	if diff := cmp.Diff(want, got, cmpopts.EquateApproxTime(10*time.Millisecond)); diff != "" {
+		t.Errorf("Receipt mismatch (-want +got):\n%s", diff)
+	}
 }
 ```
 
-### 3. Testify Assertions
+| 断言方式 | 选择场景 | 代价 |
+|---|---|---|
+| 标准库 `if got != want` | 标量、错误、布尔；库代码零依赖 | 结构体差异要自己打印 |
+| `go-cmp` `cmp.Diff` | 结构体/切片/map 比较；需要忽略字段（`cmpopts.IgnoreFields`）、近似时间、无序切片 | 未导出字段默认 panic，需 `cmpopts.IgnoreUnexported` 或 `cmp.AllowUnexported` |
+| testify `require`/`assert` | 业务服务测试，可读性优先；`require.ErrorIs`、`require.JSONEq` 很省事 | `assert.Equal` 对 `time.Time` 与含 monotonic 的值会误判；`assert.Equal(t, int64(1), 1)` 因类型不同失败 |
+
+## 测试替身：fake / stub / mock
+
+- **fake**：有真实语义的轻量实现（内存 repo）。默认首选——测试读起来像业务，重构接口时改一处。
+- **stub**：固定返回值的空壳，适合只需一个错误注入点的场景（`func` 类型实现接口最短）。
+- **mock**：记录并断言交互（调了几次、传了什么）。只在"交互本身就是契约"时用（发了几条 MQ 消息、是否调了 Rollback）。
+
+手写 fake 是一个带 `sync.Mutex` 的 `map[string]User` 加两个方法，二十行以内；它同时是契约测试的第一个被测实现。testify mock 的两条纪律——每个子测试独立实例、ctx 用 `mock.Anything`：
 
 ```go
-package service
+func TestService_Profile_Mock(t *testing.T) {
+	t.Parallel()
+	t.Run("repo error is wrapped", func(t *testing.T) {
+		t.Parallel()
+		repo := new(MockRepo) // 每个子测试独立 mock，期望不串
+		// ctx 用 mock.Anything：service 内部一旦派生 WithTimeout，精确匹配 ctx 必失败
+		repo.On("Get", mock.Anything, "404").Return(double.User{}, double.ErrNotFound).Once()
 
-import (
-    "testing"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
-)
+		_, err := double.NewService(repo).Profile(t.Context(), "404")
 
-func TestUserService_Create(t *testing.T) {
-    svc := NewUserService(mockRepo)
-
-    user, err := svc.Create(ctx, &CreateUserReq{
-        Name:  "John",
-        Email: "john@example.com",
-    })
-
-    // require stops test on failure (use for preconditions)
-    require.NoError(t, err)
-    require.NotNil(t, user)
-
-    // assert continues test on failure (use for assertions)
-    assert.Equal(t, "John", user.Name)
-    assert.Equal(t, "john@example.com", user.Email)
-    assert.NotZero(t, user.ID)
-    assert.WithinDuration(t, time.Now(), user.CreatedAt, time.Second)
+		require.ErrorIs(t, err, double.ErrNotFound)
+		repo.AssertExpectations(t)
+	})
 }
 ```
 
-### 4. Mock with Testify Mock
+生成而不是手写：`mockery`（testify 模板参数 `with-expecter: true` 得到类型安全的 `EXPECT().Get(...)`）或 `go.uber.org/mock` 的 `mockgen -source=repo.go -destination=mock_repo_test.go -package=double_test`（原 golang/mock 已归档，用 uber 分叉）。生成文件放 `_test.go` 或 `internal/mocks/`，不进生产二进制。
+
+**何时不该 mock**：被依赖方是纯函数或标准库（`time`、`json`）；接口方法 > 5 个且测试只关心结果不关心交互；数据库——mock SQL 字符串只是在测自己写的 SQL 字符串，用 testcontainers 跑真库。
+
+## 契约测试：同一接口多实现共用一套 suite
 
 ```go
-package service
-
-import (
-    "context"
-    "testing"
-    "github.com/stretchr/testify/mock"
-    "github.com/stretchr/testify/assert"
-)
-
-// Mock definition
-type MockUserRepo struct {
-    mock.Mock
+// RunRepositorySuite 是接口契约：任何 UserRepository 实现（内存 fake、pgx、GORM）都跑同一套。
+// newRepo 每个子测试调用一次，保证实现之间、用例之间无共享状态。
+func RunRepositorySuite(t *testing.T, newRepo func(t *testing.T) double.UserRepository) {
+	t.Run("get missing returns ErrNotFound", func(t *testing.T) {
+		repo := newRepo(t)
+		_, err := repo.Get(t.Context(), "missing")
+		require.ErrorIs(t, err, double.ErrNotFound)
+	})
+	t.Run("save then get", func(t *testing.T) {
+		repo := newRepo(t)
+		want := double.User{ID: "7", Name: "Bob"}
+		require.NoError(t, repo.Save(t.Context(), want))
+		got, err := repo.Get(t.Context(), "7")
+		require.NoError(t, err)
+		require.Equal(t, want, got)
+	})
 }
 
-func (m *MockUserRepo) GetByID(ctx context.Context, id int64) (*model.User, error) {
-    args := m.Called(ctx, id)
-    if args.Get(0) == nil {
-        return nil, args.Error(1)
-    }
-    return args.Get(0).(*model.User), args.Error(1)
-}
-
-func (m *MockUserRepo) Create(ctx context.Context, user *model.User) error {
-    args := m.Called(ctx, user)
-    return args.Error(0)
-}
-
-func (m *MockUserRepo) List(ctx context.Context, opts ListOptions) ([]*model.User, int64, error) {
-    args := m.Called(ctx, opts)
-    return args.Get(0).([]*model.User), args.Get(1).(int64), args.Error(2)
-}
-
-// Test using mock
-func TestUserService_GetByID(t *testing.T) {
-    mockRepo := new(MockUserRepo)
-    svc := NewUserService(mockRepo)
-    ctx := context.Background()
-
-    t.Run("user found", func(t *testing.T) {
-        expected := &model.User{ID: 1, Name: "John", Email: "john@test.com"}
-        mockRepo.On("GetByID", ctx, int64(1)).Return(expected, nil).Once()
-
-        user, err := svc.GetByID(ctx, 1)
-
-        assert.NoError(t, err)
-        assert.Equal(t, expected, user)
-        mockRepo.AssertExpectations(t)
-    })
-
-    t.Run("user not found", func(t *testing.T) {
-        mockRepo.On("GetByID", ctx, int64(999)).Return(nil, apperror.ErrNotFound).Once()
-
-        user, err := svc.GetByID(ctx, 999)
-
-        assert.ErrorIs(t, err, apperror.ErrNotFound)
-        assert.Nil(t, user)
-        mockRepo.AssertExpectations(t)
-    })
+func TestMemoryRepo_Contract(t *testing.T) {
+	RunRepositorySuite(t, func(t *testing.T) double.UserRepository { return double.NewMemoryRepo() })
 }
 ```
 
-### 5. HTTP Handler Testing
+真库实现在 integration 包里再调一次 `RunRepositorySuite`，`newRepo` 返回绑定了测试事务的 repo。fake 与真实现跑同一套 suite，才能保证"用 fake 测出来的绿"在生产实现上同样成立。
+
+## Gin handler 测试：必须挂完整中间件栈
+
+go-gin-api 约定 handler 出错只 `c.Error(err); return`，状态码由错误中间件映射。测试若绕过中间件，错误路径返回 200 空 body（Go 1.27 + gin v1.12 实测）。
 
 ```go
-package handler
-
-import (
-    "bytes"
-    "encoding/json"
-    "net/http"
-    "net/http/httptest"
-    "testing"
-
-    "github.com/gin-gonic/gin"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
-)
-
-func setupRouter(h *UserHandler) *gin.Engine {
-    gin.SetMode(gin.TestMode)
-    r := gin.New()
-    r.GET("/users/:id", h.GetByID)
-    r.POST("/users", h.Create)
-    r.GET("/users", h.List)
-    return r
-}
-
-func TestUserHandler_Create(t *testing.T) {
-    mockSvc := new(MockUserService)
-    h := NewUserHandler(mockSvc)
-    router := setupRouter(h)
-
-    t.Run("success", func(t *testing.T) {
-        reqBody := dto.CreateUserReq{
-            Name:     "John",
-            Email:    "john@test.com",
-            Password: "password123",
-            Role:     "user",
-        }
-        body, _ := json.Marshal(reqBody)
-
-        mockSvc.On("Create", mock.Anything, &reqBody).
-            Return(&model.User{ID: 1, Name: "John", Email: "john@test.com"}, nil).Once()
-
-        w := httptest.NewRecorder()
-        req := httptest.NewRequest("POST", "/users", bytes.NewReader(body))
-        req.Header.Set("Content-Type", "application/json")
-        router.ServeHTTP(w, req)
-
-        assert.Equal(t, http.StatusCreated, w.Code)
-
-        var resp response.Response
-        err := json.Unmarshal(w.Body.Bytes(), &resp)
-        require.NoError(t, err)
-        assert.Equal(t, 0, resp.Code)
-    })
-
-    t.Run("validation error", func(t *testing.T) {
-        body := `{"name":"","email":"invalid"}`
-        w := httptest.NewRecorder()
-        req := httptest.NewRequest("POST", "/users", bytes.NewReader([]byte(body)))
-        req.Header.Set("Content-Type", "application/json")
-        router.ServeHTTP(w, req)
-
-        assert.Equal(t, http.StatusBadRequest, w.Code)
-    })
-}
-
-// Helper for authenticated requests
-func authenticatedRequest(method, path string, body []byte, token string) *http.Request {
-    req := httptest.NewRequest(method, path, bytes.NewReader(body))
-    req.Header.Set("Content-Type", "application/json")
-    req.Header.Set("Authorization", "Bearer "+token)
-    return req
+// NewRouter 是生产与测试共用的唯一路由装配点：测试若自己 gin.New() 只挂 handler，
+// 错误路径会返回 200 空 body，测不出任何问题。
+func NewRouter(h *Handler) *gin.Engine {
+	r := gin.New()
+	r.Use(gin.Recovery(), errorHandler())
+	r.GET("/users/:id", h.GetUser)
+	return r
 }
 ```
 
-### 6. Test Fixtures & Helpers
+```go
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.path, nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			require.Equal(t, tt.wantCode, rec.Code)
+			require.JSONEq(t, tt.wantBody, rec.Body.String())
+		})
+```
+
+`gin.SetMode(gin.TestMode)` 放 `TestMain`；响应体用 `require.JSONEq` 断言，不比对字符串。
+
+## 出站 HTTP：httptest.NewServer 与 fake RoundTripper
 
 ```go
-package testutil
+// httptest.NewServer：走真实 TCP 与 http.Transport，适合验证超时、重试、状态码语义。
+func TestClient_Ping_Upstream5xx(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
 
-import (
-    "database/sql"
-    "os"
-    "path/filepath"
-    "testing"
-    "time"
-)
-
-// Test helper for creating test users
-func NewTestUser(t *testing.T, overrides ...func(*model.User)) *model.User {
-    t.Helper()
-    user := &model.User{
-        Name:      "Test User",
-        Email:     fmt.Sprintf("test-%d@example.com", time.Now().UnixNano()),
-        Password:  "hashed_password",
-        Role:      "user",
-        CreatedAt: time.Now(),
-    }
-    for _, fn := range overrides {
-        fn(user)
-    }
-    return user
+	err := outbound.NewClient(srv.URL, "tok", srv.Client()).Ping(t.Context())
+	require.ErrorIs(t, err, outbound.ErrUpstream)
 }
 
-// Golden file testing
-func Golden(t *testing.T, name string, actual []byte) {
-    t.Helper()
-    golden := filepath.Join("testdata", name+".golden")
+type roundTripFunc func(*http.Request) (*http.Response, error)
 
-    if os.Getenv("UPDATE_GOLDEN") != "" {
-        os.MkdirAll(filepath.Dir(golden), 0755)
-        os.WriteFile(golden, actual, 0644)
-        return
-    }
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-    expected, err := os.ReadFile(golden)
-    if err != nil {
-        t.Fatalf("failed to read golden file: %v", err)
-    }
-
-    if !bytes.Equal(actual, expected) {
-        t.Errorf("output does not match golden file.\nGot:\n%s\nWant:\n%s\nRun with UPDATE_GOLDEN=1 to update.",
-            actual, expected)
-    }
-}
-
-// Test database setup
-func SetupTestDB(t *testing.T) *sql.DB {
-    t.Helper()
-    dsn := os.Getenv("TEST_DATABASE_URL")
-    if dsn == "" {
-        t.Skip("TEST_DATABASE_URL not set")
-    }
-
-    db, err := sql.Open("postgres", dsn)
-    if err != nil {
-        t.Fatalf("connecting to test db: %v", err)
-    }
-
-    t.Cleanup(func() {
-        // Clean up test data
-        db.Exec("DELETE FROM users WHERE email LIKE 'test-%'")
-        db.Close()
-    })
-
-    return db
-}
-
-// Temporary directory helper
-func TempDir(t *testing.T) string {
-    t.Helper()
-    dir := t.TempDir() // Auto-cleaned up
-    return dir
+// fake RoundTripper：不开端口，直接断言出站请求的形状（header、path），单测里更快更稳。
+func TestClient_Ping_SendsBearer(t *testing.T) {
+	t.Parallel()
+	hc := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		require.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+		require.Equal(t, "/ping", r.URL.Path)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(""))}, nil
+	})}
+	require.NoError(t, outbound.NewClient("http://api", "tok", hc).Ping(t.Context()))
 }
 ```
 
-### 7. Integration Tests
+客户端必须接受注入的 `*http.Client`；fake `Response` 的 `Body` 不能为 nil。
+
+## 集成测试隔离：testcontainers + 每测试事务回滚
 
 ```go
-//go:build integration
+var pool *pgxpool.Pool
 
-package integration
-
-import (
-    "context"
-    "testing"
-    "yourapp/internal/repository"
-    "yourapp/internal/testutil"
-)
-
-func TestUserRepository_Integration(t *testing.T) {
-    db := testutil.SetupTestDB(t)
-    repo := repository.NewSqlxUserRepo(db)
-    ctx := context.Background()
-
-    t.Run("CRUD lifecycle", func(t *testing.T) {
-        // Create
-        user := testutil.NewTestUser(t)
-        err := repo.Create(ctx, user)
-        require.NoError(t, err)
-        assert.NotZero(t, user.ID)
-
-        // Read
-        found, err := repo.GetByID(ctx, user.ID)
-        require.NoError(t, err)
-        assert.Equal(t, user.Name, found.Name)
-
-        // Update
-        user.Name = "Updated Name"
-        err = repo.Update(ctx, user)
-        require.NoError(t, err)
-
-        found, _ = repo.GetByID(ctx, user.ID)
-        assert.Equal(t, "Updated Name", found.Name)
-
-        // Delete
-        err = repo.Delete(ctx, user.ID)
-        require.NoError(t, err)
-
-        _, err = repo.GetByID(ctx, user.ID)
-        assert.ErrorIs(t, err, apperror.ErrNotFound)
-    })
-}
-```
-
-### 8. Benchmarks
-
-```go
-package parser
-
-import "testing"
-
-func BenchmarkParseJSON(b *testing.B) {
-    data := []byte(`{"name":"John","age":30,"email":"john@test.com"}`)
-
-    b.ResetTimer()
-    for i := 0; i < b.N; i++ {
-        ParseJSON(data)
-    }
-}
-
-func BenchmarkParseJSON_Large(b *testing.B) {
-    data := generateLargeJSON(1000)
-
-    b.ResetTimer()
-    b.ReportAllocs()
-    for i := 0; i < b.N; i++ {
-        ParseJSON(data)
-    }
-}
-
-// Sub-benchmarks for comparison
-func BenchmarkParse(b *testing.B) {
-    sizes := []struct {
-        name string
-        size int
-    }{
-        {"Small", 10},
-        {"Medium", 100},
-        {"Large", 1000},
-        {"XLarge", 10000},
-    }
-
-    for _, s := range sizes {
-        data := generateLargeJSON(s.size)
-        b.Run(s.name, func(b *testing.B) {
-            b.ReportAllocs()
-            for i := 0; i < b.N; i++ {
-                ParseJSON(data)
-            }
-        })
-    }
-}
-
-// Parallel benchmark
-func BenchmarkConcurrentAccess(b *testing.B) {
-    cache := NewCache()
-    // Pre-populate
-    for i := 0; i < 1000; i++ {
-        cache.Set(fmt.Sprintf("key-%d", i), i)
-    }
-
-    b.RunParallel(func(pb *testing.PB) {
-        i := 0
-        for pb.Next() {
-            cache.Get(fmt.Sprintf("key-%d", i%1000))
-            i++
-        }
-    })
-}
-```
-
-### 9. Test Main & Shared Setup
-
-```go
-package mypackage
-
-import (
-    "os"
-    "testing"
-)
-
-var testDB *sql.DB
-
+// 一个包一个容器（TestMain 起），一个测试一个事务（结束回滚）：用例之间零残留、可并行。
+// Docker 不可用时 postgres.Run 直接报错 -> 测试失败，而不是 t.Skip 造成 CI 假绿。
 func TestMain(m *testing.M) {
-    // Setup
-    var err error
-    testDB, err = setupTestDatabase()
-    if err != nil {
-        log.Fatalf("setting up test db: %v", err)
-    }
+	ctx := context.Background()
+	ctr, err := postgres.Run(ctx, "postgres:16-alpine",
+		postgres.WithDatabase("app"), postgres.WithUsername("app"), postgres.WithPassword("secret"),
+		postgres.BasicWaitStrategies())
+	if err != nil {
+		logger.Fatal("start postgres container", zap.Error(err))
+	}
+	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		logger.Fatal("connection string", zap.Error(err))
+	}
+	if pool, err = pgxpool.New(ctx, dsn); err != nil {
+		logger.Fatal("open pool", zap.Error(err))
+	}
+	code := m.Run()
+	pool.Close()
+	logger.LogIf(testcontainers.TerminateContainer(ctr))
+	os.Exit(code)
+}
 
-    // Run tests
-    code := m.Run()
-
-    // Teardown
-    testDB.Close()
-
-    os.Exit(code)
+// txForTest 返回测试专用事务；t.Context() 在 Cleanup 前已被取消，回滚要用 WithoutCancel。
+func txForTest(t *testing.T) pgx.Tx {
+	t.Helper()
+	tx, err := pool.Begin(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
+	return tx
 }
 ```
 
-### 10. Testing with Context and Timeouts
+`TestMain` 没有 `t`，是唯一允许 `context.Background()` 的地方。运行：`go test -tags integration -race ./integration/`。事务回滚测不到跨事务可见性与 `COMMIT` 触发的延迟约束/触发器，这类用例改用每测试独立 schema（`CREATE SCHEMA t_<name>` + `search_path`）。
+
+| 方案 | 选择场景 | 代价 |
+|---|---|---|
+| testcontainers-go 模块（postgres/mysql/redis） | 主流；`Run` 内置就绪等待，`ConnectionString` 直接给 DSN | 依赖 Docker；首次拉镜像慢，CI 要缓存镜像层 |
+| ory/dockertest | 已有存量、不想引入 testcontainers 的重依赖 | 就绪等待要自己写 retry；API 偏底层 |
+| 共享外部库 + `TEST_DATABASE_URL` | 团队有常驻测试库、无 Docker 的环境 | 必须每测试独立 schema，否则并行互相污染 |
+
+## 并发与时间：-race、goleak、synctest
 
 ```go
-func TestSlowOperation(t *testing.T) {
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-
-    result, err := SlowOperation(ctx)
-    require.NoError(t, err)
-    assert.NotEmpty(t, result)
+// goleak.VerifyTestMain：包内任何测试泄漏 goroutine，整个包失败。
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }
 
-func TestOperationCancellation(t *testing.T) {
-    ctx, cancel := context.WithCancel(context.Background())
-    cancel() // Cancel immediately
-
-    _, err := SlowOperation(ctx)
-    assert.ErrorIs(t, err, context.Canceled)
+// synctest 气泡内 time 是假时钟：Sleep 不真等待，且只在所有 goroutine 都阻塞时推进，
+// 所以能对"总耗时 == 100ms + 200ms"做精确相等断言，测试毫秒级完成、零 flaky。
+func TestRetry_Backoff(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		start := time.Now()
+		calls := 0
+		err := timing.Retry(t.Context(), 3, 100*time.Millisecond, func() error {
+			calls++
+			if calls < 3 {
+				return errors.New("transient")
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("Retry() = %v, want nil", err)
+		}
+		if got := time.Since(start); got != 300*time.Millisecond {
+			t.Fatalf("elapsed = %v, want exactly 300ms", got)
+		}
+	})
 }
 ```
 
-## Running Tests
+synctest 约束：气泡内不能 `t.Run` / `t.Parallel`；只对气泡内创建的 channel、timer、`WaitGroup` 生效，网络 I/O 与 `Mutex` 等待不算"持久阻塞"（需要网络用 `net.Pipe`）；气泡结束时仍有 goroutine 阻塞直接报 deadlock，本身就是泄漏检测。抓 flaky：`go test -race -count=20 -run TestX ./pkg/`，`-shuffle=on` 暴露顺序依赖。单测级泄漏检测 `defer goleak.VerifyNone(t)`，`httptest.Server`、`sql.DB` 的后台 goroutine 要在 Cleanup 里关掉再验。
 
-```bash
-# Run all tests
-go test ./...
+## Fuzz
 
-# Run with verbose output
-go test -v ./...
-
-# Run specific test
-go test -run TestUserService_Create ./internal/service/
-
-# Run with coverage
-go test -cover ./...
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-
-# Run benchmarks
-go test -bench=. -benchmem ./...
-go test -bench=BenchmarkParse -count=5 ./...
-
-# Run integration tests
-go test -tags=integration ./...
-
-# Run with race detector
-go test -race ./...
-
-# Update golden files
-UPDATE_GOLDEN=1 go test ./...
-
-# Run with timeout
-go test -timeout 30s ./...
+```go
+// 运行：go test -run=^$ -fuzz=FuzzParseAmount -fuzztime=30s ./amount/
+// 失败输入自动写入 testdata/fuzz/FuzzParseAmount/，之后作为回归语料随普通 go test 运行。
+func FuzzParseAmount(f *testing.F) {
+	for _, seed := range []string{"0", "12.34", "-0.05", "", "1.234", "--5"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, in string) {
+		cents, err := amount.ParseAmount(in)
+		if err != nil {
+			// 只允许出现已定义的哨兵错误；出现其他错误或 panic 即为缺陷
+			if !errors.Is(err, amount.ErrEmpty) && !errors.Is(err, amount.ErrSyntax) &&
+				!errors.Is(err, amount.ErrPrecision) && !errors.Is(err, amount.ErrRange) {
+				t.Fatalf("unexpected error type: %v", err)
+			}
+			return
+		}
+		// 性质：解析成功的值经 Format 再 Parse 必须回到同一数值
+		back, err := amount.ParseAmount(amount.FormatAmount(cents))
+		if err != nil || back != cents {
+			t.Fatalf("round trip %q -> %d -> %q -> %d, %v", in, cents, amount.FormatAmount(cents), back, err)
+		}
+	})
+}
 ```
 
-## Best Practices
+Fuzz 断言性质（不 panic、错误集合封闭、往返一致），不是具体值；`-fuzz` 一次只能匹配一个 Fuzz 函数，CI 不带 `-fuzz`、只回放语料。
 
-### Do's
-- **Use `t.Helper()`** in test helpers for better error reporting
-- **Use `t.Parallel()`** for independent tests to speed up test suite
-- **Use `require` for preconditions**, `assert` for verification
-- **Use build tags** (`//go:build integration`) to separate test types
-- **Use `t.Cleanup()`** instead of manual defer for resource cleanup
-- **Name tests descriptively** with the pattern `TestFunc_Scenario`
+## Golden 文件
 
-### Don'ts
-- **Don't test private functions** directly — test through public API
-- **Don't share state** between parallel tests
-- **Don't use `time.Sleep`** for synchronization — use channels or conditions
-- **Don't ignore `_test.go` coverage** — strive for meaningful tests, not 100%
-- **Don't mock everything** — use real implementations when practical
+输出里含时间戳、随机 ID 的先归一化再比；golden 进 git，diff 即评审材料。
+
+```go
+var update = flag.Bool("update", false, "rewrite golden files")
+
+// 更新：go test ./golden/ -run TestRenderReceipt -update ；golden 文件进 git，diff 即评审材料。
+func TestRenderReceipt(t *testing.T) {
+	got := golden.RenderReceipt([]golden.Line{{Item: "coffee", Cents: 450}, {Item: "bagel", Cents: 325}})
+	path := filepath.Join("testdata", t.Name()+".golden")
+	if *update {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, got, 0o644))
+	}
+	want, err := os.ReadFile(path)
+	require.NoError(t, err, "golden missing: run with -update to create")
+	if diff := cmp.Diff(string(want), string(got)); diff != "" {
+		t.Errorf("RenderReceipt mismatch (-want +got):\n%s", diff)
+	}
+}
+```
+
+## Benchmark
+
+```go
+func BenchmarkParseAmount(b *testing.B) {
+	inputs := make([]string, 1024) // 数据在热循环外预生成：否则测的是 Sprintf/rand 的分配
+	for i := range inputs {
+		inputs[i] = strconv.FormatInt(rand.Int64N(1_000_000), 10) + ".99"
+	}
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() { // Go 1.24 起：自动排除 setup 时间，且循环体内结果不会被编译器优化掉
+		_, _ = amount.ParseAmount(inputs[i%len(inputs)])
+		i++
+	}
+}
+```
+
+对比：`go test -bench . -benchmem -count 10 > new.txt` 后 `benchstat old.txt new.txt`；`count < 10` 时置信区间不可信。基准不与 `-race` 同跑。
+
+## 内部测试包 vs 外部测试包
+
+- `package amount_test`（外部）：只用导出 API，倒逼接口可用性，可避免 import 环。默认用它。
+- `package amount`（内部）：测复杂私有算法（解析器状态机、哈希分片）时用。折中做法是 `export_test.go`：
+
+```go
+// export_test.go 属于内部测试包（package amount），只在 go test 时编译，
+// 把私有函数暴露给同目录的外部测试包（package amount_test）。
+var ParseFraction = parseFraction
+```
+
+"不测私有函数"不是规则：私有函数有独立复杂度且公开 API 难以覆盖全部分支时就该测，代价是重构时同步改测试。
+
+## CI 参数速查
+
+| 参数 | 作用 |
+|---|---|
+| `-race -covermode=atomic -coverprofile=cover.out` | 竞态检测；`-race` 下覆盖模式默认即 `atomic`，显式指定 `set`/`count` 会报错 |
+| `-coverpkg=./...` | 统计被测包之外的代码覆盖（集成测试覆盖 service 层） |
+| `-count=1` | 绕过测试缓存；`-count=N` 抓 flaky |
+| `-shuffle=on` | 随机化顶层测试与子测试顺序，输出 seed 可复现 |
+| `-run 'TestParseAmount/negative'` | 正则匹配，`/` 分隔子测试 |
+| `gotestsum -- -race ./...` | 机器可读输出（内部走 `go test -json`）；汇总失败、重跑 flaky；已有 json 文件用 `--jsonfile` 回放 |
+| `-tags integration` | 启用带 build 标签的集成测试 |
+| `-bench . -benchmem -count 10` | 基准 + 分配统计，配 benchstat |
+
+## 何时不该用 / 选型判断
+
+| 场景 | 选择 | 理由 |
+|---|---|---|
+| 库代码、零依赖包 | 标准库 + go-cmp | testify 会进下游的 go.sum |
+| 依赖是数据库/Redis | 真实例（testcontainers） | mock 出来的 SQL 字符串没有任何验证价值 |
+| 断言"被调用了 N 次" | mock | 这是唯一 mock 优于 fake 的场景 |
+| 等待异步结果 | synctest 或 channel 通知 | `time.Sleep` 在慢 CI 上必 flaky |
+| 验证输出格式 | golden | 内联长字符串不可读、不可评审 |
+
+## 审查清单
+
+- [ ] 测试内无 `context.Background()`（TestMain 除外）、无 `b.N` 循环、无 `tt := tt`
+- [ ] 错误断言用 `errors.Is` / `AsType`，无 `strings.Contains(err.Error(), ...)`
+- [ ] `t.Parallel()` 的测试里没有 `t.Setenv` / `t.Chdir` / 包级可变状态
+- [ ] 每个子测试的 mock 独立创建；`On(...)` 的 ctx 参数是 `mock.Anything`
+- [ ] handler 测试通过生产路由装配函数构造，错误路径断言了 4xx/5xx 与响应体
+- [ ] 集成测试有 build 标签；无 `t.Skip` 兜底；每测试事务回滚或独立 schema
+- [ ] 同一接口的多个实现跑同一套契约 suite
+- [ ] 时间相关逻辑用 synctest；包级 `goleak.VerifyTestMain` 或单测 `VerifyNone`
+- [ ] 每条"线程安全 / 幂等 / 有界"注释都能指向一个 `-race` 下运行的反证测试
+- [ ] 基准的数据准备在 `b.Loop()` 之外；对比用 `benchstat` 且 `-count ≥ 10`
+- [ ] CI 命令含 `-race -shuffle=on -count=1 -covermode=atomic`
