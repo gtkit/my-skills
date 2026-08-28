@@ -277,6 +277,8 @@ main "$@"
 - 优雅关闭时序：Pod 删除 → Endpoint 摘除（异步）与 preStop 同时开始 → SIGTERM → 应用停收新请求、排空 → 超过 grace 被 SIGKILL。preStop sleep 5–10s 就是等第一步。
 - 回滚：`kubectl rollout undo` / `helm rollback` 只回代码，不回 ConfigMap 与数据库；配置变更和代码变更分开发布，DB 迁移向后兼容。Docker Hub 匿名拉取有限额，节点与 CI 配镜像加速或私有仓库。
 
+压测与烤机脚本里任何"故意占满 CPU"的命令（`stress-ng`、`yes > /dev/null`、忙循环），必须同时挂看门狗与 `ulimit -t` 两道自毁保险，不能只靠 `trap` 清理——写法见 shell-scripting。
+
 ## 成本与容量
 
 - 目标：节点 requests 分配率 70–80%（留 N+1 或"失一个可用区"余量），实际使用率 40–60%。分配率高而使用率低 = requests 虚高，用 VPA `updateMode: Off` 出推荐值对照。

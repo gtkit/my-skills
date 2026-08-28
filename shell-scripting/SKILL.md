@@ -1,6 +1,6 @@
 ---
 name: shell-scripting
-description: Shell 脚本工程化与跨平台陷阱库。当用户编写、审查或调试 Shell/Bash/sh 脚本，涉及 set -euo pipefail、trap 清理、变量引用、word splitting、数组、字符串处理、mktemp 临时文件、信号处理、退出码、管道错误传递、getopts 参数解析、单实例锁、shellcheck 静态检查，或遇到脚本在 macOS 与 Linux 上行为不一致（sed -i、date、stat、readlink、grep -P、xargs、flock、timeout、bash 3.2 与 4+/5 版本差异）时触发。触发关键词包括但不限于：shell 脚本、bash 脚本、sh 脚本、set -e、set -u、pipefail、trap、shellcheck、word splitting、IFS、mktemp、getopts、flock、BSD sed、GNU sed、macOS 脚本、脚本兼容性、部署脚本、CI 脚本、退出码、$?、"$@"、局部变量、数组遍历、unbound variable。分工：运维场景（容器、K8s、监控、故障排查）见 senior-devops-engineer，本 skill 只负责脚本本身怎么写对。
+description: Shell 脚本工程化与跨平台陷阱库。当用户编写、审查或调试 Shell/Bash/sh 脚本，涉及 set -euo pipefail、trap 清理、变量引用、word splitting、数组、字符串处理、mktemp 临时文件、信号处理、退出码、管道错误传递、getopts 参数解析、单实例锁、CPU 负载脚本的自毁保险（ulimit -t、看门狗）、shellcheck 静态检查，或遇到脚本在 macOS 与 Linux 上行为不一致（sed -i、date、stat、readlink、grep -P、xargs、flock、timeout、bash 3.2 与 4+/5 版本差异）时触发。触发关键词包括但不限于：shell 脚本、bash 脚本、sh 脚本、set -e、set -u、pipefail、trap、shellcheck、word splitting、IFS、mktemp、getopts、flock、BSD sed、GNU sed、macOS 脚本、脚本兼容性、部署脚本、CI 脚本、退出码、$?、"$@"、局部变量、数组遍历、unbound variable、ulimit、压测脚本、烤机脚本、CPU 负载。分工：运维场景（容器、K8s、监控、故障排查）见 senior-devops-engineer，本 skill 只负责脚本本身怎么写对。
 ---
 
 # Shell 脚本工程化
@@ -19,6 +19,7 @@ description: Shell 脚本工程化与跨平台陷阱库。当用户编写、审�
 8. 临时文件用 `mktemp`，且检查它的退出码；`rm -rf` 的变量用 `${var:?}` 兜底。
 9. 需要 bash 4+ 特性（关联数组、`mapfile`、`${var^^}`、`inherit_errexit`、`lastpipe`）就检查 `BASH_VERSINFO` 并报错退出，不要默默跑坏。
 10. 交付前过 `shellcheck`；没有 shellcheck 至少 `bash -n`。
+11. 故意制造 CPU 负载（压测、烤机、演练）必须叠加看门狗与 `ulimit -t` 两道自毁保险，两者都不依赖清理代码被执行。
 
 ## 脚本骨架
 
@@ -218,6 +219,45 @@ perl -e 'alarm shift; exec @ARGV' 5 some_cmd    # 实测超时后进程被 SIGAL
 
 Linux 上优先 `flock -n "$lockfile" cmd` 或 `exec 9>"$lockfile"; flock -n 9 || exit 1`（进程退出即释放）和 `timeout -k 5 30 cmd`。
 
+## 制造 CPU 负载：两道独立的自毁保险
+
+压测、烤机、故障演练里写 `while :; do :; done`、`yes > /dev/null`、`stress-ng` 这类**故意占满 CPU** 的代码时，只靠 `trap` 清理是不够的：`kill` 那行写错、变量名笔误、脚本提前 `exit`、终端被关、SSH 断开，进程就留在机器上跑到有人发现——"存活 3 天"就是这么来的。
+
+**规则：看门狗 + `ulimit -t` 必须叠加，两道保险互相独立，都不依赖清理代码被正确执行。**
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+readonly MAX_CPU=30          # 保险二：内核按 CPU 秒强制终止
+readonly MAX_WALL=60         # 保险一：看门狗按墙钟强制终止
+
+ulimit -t "$MAX_CPU"         # 必须在 fork 出负载进程之前设；子进程自动继承，且本 shell 内不可再调高
+
+# 看门狗：独立进程，自带定时器，不读任何共享变量，脚本怎么崩它都照常执行
+( sleep "$MAX_WALL"; kill -9 -$$ 2>/dev/null ) &
+readonly WATCHDOG=$!
+
+set -m                       # 让本脚本成为进程组组长，kill -9 -$$ 能带走整棵子进程树
+while :; do :; done &        # 负载进程
+readonly LOAD=$!
+
+trap 'kill "$LOAD" "$WATCHDOG" 2>/dev/null || :' EXIT   # 第三道，正常路径用；坏了也不影响上面两道
+wait "$LOAD" || :
+```
+
+两道保险各自的边界（均为 macOS bash 3.2.57 实测）：
+
+| 机制 | 计什么时间 | 触发后 | 失效场景 |
+|---|---|---|---|
+| `ulimit -t N` | **CPU 时间，不是墙钟** | 发 `SIGXCPU`，退出码 `152`（128+24） | 阻塞型进程杀不掉——`ulimit -t 2` 下 `sleep 4` 实测正常跑完退出码 0 |
+| 看门狗 `sleep N; kill` | 墙钟 | 由你决定信号，用 `-9 -$$` 带走整个进程组 | 看门狗自己被误杀、或 `$$` 不是组长（漏了 `set -m`）时只杀到自己 |
+
+- 这两条恰好互补：CPU 密集型负载被 `ulimit -t` 兜住，阻塞/挂起型被看门狗兜住，所以必须都写。
+- `ulimit -t` 要在启动负载**之前**设。降低后本 shell 内不可逆（实测再调高报 `cannot modify limit: Operation not permitted`），子进程继承，所以负载进程无法自己解除。
+- 看门狗写成 `( sleep N; kill ... ) &` 的独立子 shell，不要写成 `trap` 里的定时逻辑——它的价值就在于不依赖主流程还活着。
+- 远程执行时再加一层：`ssh` 断开不一定杀掉远端进程，负载命令套 `setsid` 或依赖上面两道保险，别指望 SIGHUP。
+
 ## macOS/BSD 与 Linux/GNU 的差异
 
 | 操作 | BSD / macOS | GNU / Linux | 可移植写法 |
@@ -298,6 +338,7 @@ rm -rf -- "${dir:?dir 未设置或为空}/"    # 实测空值时报错退出（r
 - [ ] `set -euo pipefail` 齐全，shebang 是 `bash`；要 sh 就不用 pipefail/数组/`[[ ]]`/`local`
 - [ ] 没有 `readonly/local/declare/export X="$(...)"`，全部拆成两行
 - [ ] `mktemp` 的返回值有判断；`rm -rf` 的变量用 `${var:?}` 兜底
+- [ ] 制造 CPU 负载的脚本同时有看门狗与 `ulimit -t`，且 `ulimit -t` 设在启动负载之前
 - [ ] 所有 `$var`、`"$@"` 加引号；`[[ ]]` 右侧的引号符合意图（glob/正则不加、字面量加）
 - [ ] 空数组在 `set -u` 下用 `"${arr[@]+"${arr[@]}"}"`，或先判 `${#arr[@]}`
 - [ ] 关键命令显式判断失败，不依赖 `set -e`（尤其 `||`/`&&` 列表、`$(...)`、`if` 条件里的函数）

@@ -327,6 +327,8 @@ k8s 时序（默认 `terminationGracePeriodSeconds: 30`，倒计时含 preStop�
 
 最小方法：用 toxiproxy/`tc netem` 或 Istio fault injection 对**单个**下游注入延迟（P99 × 3）、错误（50% 5xx）、不可用（拒连），每次只改一个变量，在预发或 1% 流量做。
 
+演练脚本里制造 CPU/负载的部分必须自带有界寿命：看门狗 + `ulimit -t` 两道独立保险叠加，不依赖清理代码被执行（写法见 shell-scripting）。演练留下的负载进程比被演练的故障更难排查。
+
 检查项：本服务 P99 是否被 ctx 超时钳住（而不是跟着下游涨）；重试次数是否在预算内；熔断是否在样本数够时打开、下游恢复后是否合上；降级路径是否触发且响应带 `degraded`；readiness 是否保持 up（依赖抖动不该让 Pod 被摘掉）；告警是否按 burn rate 触发而非风暴。
 
 ## 何时不该做
