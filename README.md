@@ -83,6 +83,7 @@
 |---|---|
 | `pack.sh [name...]` | 打包为 `_dist/<name>.skill`（zip），排除 `.DS_Store` |
 | `sync.sh [name...]` | 把 skill 目录同步到 `~/.claude/skills` 与 `~/.codex/skills`（`TARGETS` 可覆盖）；目标目录里仓库没有的 skill 保持不动 |
+| `sync.ps1 [name...]` | 同上，Windows 原生 PowerShell 版，用 robocopy /MIR 镜像到 `%USERPROFILE%\.claude\skills` 与 `%USERPROFILE%\.codex\skills`（`$env:TARGETS` 可覆盖，分号分隔） |
 
 ## 维护规则
 
