@@ -10,7 +10,7 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 
 ## 核心规则
 
-1. 日志库只有 `github.com/gtkit/logger/v2`（底层 zap，字段构造器沿用 `zap.String` 等）。调用点用包级 `*Ctx` 函数，不传 logger 实例，不把 `*zap.Logger` 当参数类型。
+1. 日志库只有 `github.com/gtkit/logger`：major 以项目 `go.mod` 已引用的为准，未引用时用最新 major（当前 `/v2`）；不在无关任务里升 major。v2 底层 zap，字段构造器沿用 `zap.String` 等，调用点用包级 `*Ctx` 函数，不传 logger 实例，不把 `*zap.Logger` 当参数类型。
 2. `request_id` / `trace_id` / `span_id` 由 `WithContextFields` 注入，业务代码不手写这三个字段。
 3. 不调 `otel.SetTracerProvider`，`otel.Tracer` 返回 no-op，span 全部静默丢弃（Go 1.27 + otel v1.46 实测：`SpanContext().IsValid()==false`，TraceID 全 0）；不调 `otel.SetTextMapPropagator`，本地 span 正常但出站不带 `traceparent`，跨服务链路断在这里。两者都不报错。
 4. metric label 值域必须有限可枚举；每个 label 组合是一条独立时间序列。user_id / URL 原文 / IP / order_id 永远不做 label。
@@ -58,7 +58,7 @@ sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total
 
 ## 审查清单
 
-- [ ] 日志只 import `github.com/gtkit/logger/v2` + `go.uber.org/zap`（字段）；没有 `log`、`log/slog`、`*zap.Logger` 参数
+- [ ] 日志只 import `github.com/gtkit/logger`（major 与 go.mod 一致）+ `go.uber.org/zap`（字段）；没有 `log`、`log/slog`、`*zap.Logger` 参数
 - [ ] `WithContextFields` 注入了 request_id / trace_id / span_id，业务代码里 grep 不到手写这三个字段
 - [ ] main 里 `otelsetup.Init` 与 `otel.SetTextMapPropagator` 都执行了；随手起一个 span 检查 `SpanContext().IsValid()` 为 true
 - [ ] 中间件顺序：otelgin → RequestID → AccessLog → metrics；request_id 写进 `c.Request.Context()` 而不只 `c.Set`

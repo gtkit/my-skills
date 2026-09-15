@@ -58,6 +58,13 @@
 |---|---|
 | `planning-with-files` / `planning-with-files-web` | 基于文件的任务规划（task_plan / findings / progress）；在 git 仓库内使用时把三个文件写入 `.git/info/exclude` |
 
+## 与 harness-engineering / openspec-auto 的分工
+
+- 本仓库负责**通用工程知识**：语言写法、框架用法、并发、数据、稳定性、安全、测试、性能。同一主题只在这里写全，`.harness/guides/` 不再复制一份。
+- [harness-engineering](../harness-engineering) 负责**项目约定**：技术栈选型（gtkit 系列）、分层与依赖方向、DTO 与错误码、支付与迁移流程、门禁命令、错误记忆；其 guide 涉及通用知识时指向本仓库对应 skill。
+- [openspec-auto-bootstrap](../openspec-auto-bootstrap) 负责**流程**：什么请求要先出 proposal / spec / tasks，改代码前后的守门与收口。
+- 三者装进同一个项目互不覆盖：skill 走 `~/.claude/skills` 与 `~/.codex/skills`，harness 与 openspec-auto 的产物全在项目里且只写 `.git/info/exclude`。
+
 ## 组合方式
 
 - 任何 Go 代码：`use-modern-go` 常驻；交付前验证走 `go-enterprise-quality`（验证深度按改动类型分级，文案改动只跑 build/vet）；审查走 `go-review`；架构与选型问题走 `senior-go-engineer`，方案文档走 `tech-design-review`；具体领域再叠加对应的 go-* 专项。
