@@ -20,6 +20,17 @@ description: Go 数据一致性：隔离级别与幻读、死锁重试、悲观/
 9. 任何最终一致方案都要配对账：没有对账的最终一致 = 不知道什么时候不一致。
 10. 契约（幂等、有界、最多一次）没有反证测试就不写进注释。
 
+## 按任务读取
+
+以下内容按任务读取，只读本次需要的文件；核心规则与审查清单已覆盖其结论。
+
+| 任务 | 读 |
+|---|---|
+| 处理 MySQL 1213 / Postgres 40001，写重试逻辑 | `references/deadlock-retry.md` |
+| 悲观锁、乐观锁、原子条件更新的实现 | `references/locking.md` |
+| 实现幂等键与状态机 | `references/idempotency.md` |
+| 实现本地消息表 / Outbox | `references/outbox.md` |
+
 ## 隔离级别与现象
 
 | | MySQL InnoDB | Postgres |
@@ -31,195 +42,6 @@ description: Go 数据一致性：隔离级别与幻读、死锁重试、悲观/
 | 出错后事务状态 | 1213 死锁：整个事务已回滚；1205 锁等待超时（默认 50s）：只回滚当前语句，事务仍持锁，必须显式 `Rollback` | 任何错误都让事务进入 aborted（25P02），只能 `ROLLBACK` |
 
 RR 下"先快照读再当前读"是经典写偏斜：SELECT 看到余额 100，UPDATE 时别人已把它改成 0——快照读的结果不能作为写的依据，写依据要来自 `FOR UPDATE` 读或条件 UPDATE。`sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true}` 由驱动翻译成 `SET TRANSACTION ISOLATION LEVEL ...`（mysql）/ `BEGIN ISOLATION LEVEL ... READ ONLY`（pgx）；大多数业务事务用默认级别 + 显式锁，只在报表/一致性快照场景改级别。
-
-## 死锁与序列化失败重试
-
-```go
-// IsRetryableTxErr 识别"整个事务重跑一次就可能成功"的错误：
-// MySQL 1213 死锁（InnoDB 已回滚整个事务）、1205 锁等待超时（默认只回滚当前语句，事务仍持锁，必须显式 Rollback）；
-// Postgres 40001 serialization_failure、40P01 deadlock_detected（事务已 aborted，只能 ROLLBACK）。
-func IsRetryableTxErr(err error) bool {
-	if me, ok := errors.AsType[*mysql.MySQLError](err); ok {
-		return me.Number == 1213 || me.Number == 1205
-	}
-	if pe, ok := errors.AsType[*pgconn.PgError](err); ok {
-		return pe.Code == "40001" || pe.Code == "40P01"
-	}
-	return false
-}
-
-// RunTx：有界重试 + 抖动退避。fn 必须可无副作用地重跑——不在 fn 里发 MQ、调外部接口、改内存状态。
-func RunTx(ctx context.Context, db *sql.DB, opts *sql.TxOptions, maxAttempts int, fn func(tx *sql.Tx) error) error {
-	maxAttempts = max(maxAttempts, 1) // 0 或负数不能退化成"什么都不做却返回 nil"
-	var lastErr error
-	for attempt := range maxAttempts {
-		err := runOnce(ctx, db, opts, fn)
-		if err == nil {
-			return nil
-		}
-		lastErr = err
-		if !IsRetryableTxErr(err) || attempt == maxAttempts-1 {
-			break
-		}
-		backoff := time.Duration(attempt+1)*20*time.Millisecond + rand.N(20*time.Millisecond) // 抖动错开多个竞争者
-		logger.WarnCtx(ctx, "tx retry", zap.Int("attempt", attempt+1), zap.Duration("backoff", backoff), zap.Error(err))
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(backoff):
-		}
-	}
-	return lastErr
-}
-
-func runOnce(ctx context.Context, db *sql.DB, opts *sql.TxOptions, fn func(tx *sql.Tx) error) (err error) {
-	tx, err := db.BeginTx(ctx, opts) // opts 例：&sql.TxOptions{Isolation: sql.LevelSerializable}
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback()
-			panic(p)
-		}
-		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
-				err = errors.Join(err, rbErr)
-			}
-		}
-	}()
-	if err = fn(tx); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		// Commit 返回 context.Canceled / 网络错误时 DB 可能已经提交：这里不能重试也判定不了，靠幂等键或对账兜底。
-		return fmt.Errorf("commit: %w", err)
-	}
-	return nil
-}
-```
-
-死锁预防比重试更便宜：所有事务按同一顺序拿锁（按主键升序更新）、缩短事务、用 RC 减少间隙锁、批量更新按主键排序后分批。MySQL `SHOW ENGINE INNODB STATUS` 的 `LATEST DETECTED DEADLOCK` 段给出两个事务各自持有与等待的锁，先看这个再改代码。
-
-## 三种锁的选型
-
-| 方案 | 适合 | 不适合 | 判定方式 |
-|---|---|---|---|
-| 悲观锁 `SELECT ... FOR UPDATE` | 冲突率高、后续逻辑复杂依赖读到的值、任务抢占（配 `SKIP LOCKED`） | 长事务、锁范围大（RR 下范围条件加间隙锁） | 读到即持有，事务结束释放 |
-| 乐观锁 version 列 | 读多写少、冲突率低、跨请求的"读-改-写"（前端表单） | 冲突率高（重试风暴）、写热点 | `UPDATE ... WHERE version = ?` 的 RowsAffected |
-| 原子条件更新 | 库存/余额/配额等数值扣减、状态机单步流转 | 需要读取旧值做复杂计算 | `UPDATE ... WHERE stock >= ?` 的 RowsAffected |
-
-```go
-// 悲观锁：FOR UPDATE 锁行直到事务结束。SKIP LOCKED 跳过被别人锁住的行（任务抢占的标准写法，MySQL 8.0+/Postgres 9.5+）；
-// NOWAIT 拿不到锁立即报错（MySQL 3572 / Postgres 55P03），而不是等满 innodb_lock_wait_timeout（默认 50s）拖垮线程池。
-func ClaimTask(ctx context.Context, tx *sql.Tx) (int64, error) {
-	var id int64
-	err := tx.QueryRowContext(ctx,
-		`SELECT id FROM tasks WHERE status = 'pending' ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, ErrNoTask
-	}
-	if err != nil {
-		return 0, fmt.Errorf("claim task: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE tasks SET status = 'running' WHERE id = ?`, id); err != nil {
-		return 0, fmt.Errorf("mark running: %w", err)
-	}
-	return id, nil
-}
-
-// 乐观锁：读时带出 version，写时 WHERE version = 旧值；RowsAffected == 0 说明有人先改了，调用方重读后重试或直接报冲突。
-// 适合读多写少、冲突率低；冲突率高时重试风暴比悲观锁更糟。version = version + 1 保证行一定变化，RowsAffected 不受"值未变"影响。
-func UpdateProfile(ctx context.Context, db *sql.DB, id int64, name string, version int64) error {
-	res, err := db.ExecContext(ctx,
-		`UPDATE profiles SET name = ?, version = version + 1 WHERE id = ? AND version = ?`, name, id, version)
-	if err != nil {
-		return fmt.Errorf("update profile: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
-	}
-	if n == 0 {
-		return ErrConflict
-	}
-	return nil
-}
-
-// 原子条件更新：一条 UPDATE 把"检查 + 扣减"交给行锁完成，没有 check-then-act 窗口，也少一次往返。
-// 库存、余额、配额这类"数值不能为负"的场景首选。qty <= 0 时 UPDATE 不改值，MySQL 默认 RowsAffected 报 0，会误判缺货，所以先拦。
-func DeductStock(ctx context.Context, db *sql.DB, skuID int64, qty int) error {
-	if qty <= 0 {
-		return fmt.Errorf("invalid qty %d", qty)
-	}
-	res, err := db.ExecContext(ctx,
-		`UPDATE stocks SET available = available - ? WHERE sku_id = ? AND available >= ?`, qty, skuID, qty)
-	if err != nil {
-		return fmt.Errorf("deduct stock: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
-	}
-	if n == 0 {
-		return ErrOutOfStock
-	}
-	return nil
-}
-```
-
-单行热点（秒杀同一 SKU）三种锁都会在行锁上排队；解法是拆分（库存分桶到 N 行）、前置 Redis 预扣 + DB 异步落账、或排队削峰，不是换锁。
-
-## 幂等键状态机
-
-状态只有三个：不存在 → processing → done。DB 实现靠主键/唯一键做原子抢占，`FOR UPDATE` 串行化并发重复请求；下面的 `DBStore` 实现 go-microservice 定义的 `idem.Store`（`Begin/Done/Fail`）。
-
-```go
-// Begin 原子抢占：返回 StateNone 表示本次拿到执行权。
-// INSERT 单独自动提交，不放进下面的事务：Postgres 里任何报错（含 23505）都让事务进入 aborted，后续 SELECT 直接失败。
-func (s *DBStore) Begin(ctx context.Context, key string) (State, []byte, error) {
-	now := time.Now()
-	ttl := max(s.TTL, time.Minute) // TTL 为零意味着任何并发重复请求都能立刻接管
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO idempotency_keys (idem_key, state, expires_at) VALUES (?, ?, ?)`,
-		key, StateProcessing, now.Add(ttl))
-	switch {
-	case err == nil:
-		return StateNone, nil, nil
-	case !isDuplicate(err):
-		return StateNone, nil, fmt.Errorf("insert idempotency key: %w", err)
-	}
-	tx, err := s.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return StateNone, nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }() // Commit 成功后返回 ErrTxDone，无害
-	var (
-		state   State
-		result  []byte
-		expires time.Time
-	)
-	err = tx.QueryRowContext(ctx, // FOR UPDATE 把并发重复请求串行化：同一时刻只有一个能接管过期记录
-		`SELECT state, result, expires_at FROM idempotency_keys WHERE idem_key = ? FOR UPDATE`, key).
-		Scan(&state, &result, &expires)
-	if err != nil {
-		return StateNone, nil, fmt.Errorf("load idempotency key: %w", err)
-	}
-	if state == StateDone {
-		return StateDone, result, nil
-	}
-	if now.Before(expires) {
-		return StateProcessing, nil, nil
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE idempotency_keys SET expires_at = ? WHERE idem_key = ?`, now.Add(ttl), key); err != nil {
-		return StateNone, nil, fmt.Errorf("take over idempotency key: %w", err)
-	}
-	return StateNone, nil, tx.Commit()
-}
-```
-
-- `isDuplicate` 用 `errors.AsType` 识别 MySQL 1062 / Postgres 23505。`Done` 用 `WHERE state = processing` 条件更新写结果，`Fail` 只在业务确定无副作用时删记录。
-- processing 过期接管意味着业务会被重做：业务写全在本库时，直接把 INSERT key 与业务写放同一事务，唯一键冲突即重复，不需要 processing 态；涉及外部调用时，外部调用必须携带同一 key 让下游去重。
-- Redis `SetNX` 做幂等的失败模式：① 并发假成功——第二个请求看到 key 存在就返回成功，但没有结果可回放，客户端拿到 200 却没有订单号；② 崩溃残留——SetNX 后进程挂掉，key 直到 TTL 才消失，期间重试全被拒；③ 主从切换丢 key——异步复制下主库写入后立刻宕机，新主没有这个 key，重复请求放行。三条里任何一条都足以否决"只用 Redis"，它只能挡在 DB 唯一键前面减轻压力。
 
 ## 分布式事务选型
 
@@ -262,56 +84,6 @@ func compensate(ctx context.Context, done []Step, cause error) error {
 ```
 
 - TCC 的两个必修陷阱：**空回滚**——Try 超时未执行但 Cancel 已到达，Cancel 必须识别"没有 Try 过"并直接成功，同时插入 `(xid, branch, status=cancelled)` 记录；**悬挂**——迟到的 Try 在 Cancel 之后到达，若执行就把资源永久冻结，所以 Try 先查该记录、存在即拒绝。两者都靠事务状态表的 `(xid, branch)` 唯一键实现。
-
-## Transactional Outbox
-
-```go
-// Enqueue 必须在业务事务内调用。
-func Enqueue(ctx context.Context, tx *sql.Tx, topic string, payload []byte) error {
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO outbox (topic, payload, status, attempts, next_at) VALUES (?, ?, 0, 0, ?)`,
-		topic, payload, time.Now()); err != nil {
-		return fmt.Errorf("enqueue outbox: %w", err)
-	}
-	return nil
-}
-
-func (r *Relay) relayBatch(ctx context.Context) (int, error) {
-	tx, err := r.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	msgs, err := lockPending(ctx, tx, r.Batch)
-	if err != nil {
-		return 0, err
-	}
-	for _, m := range msgs {
-		if err := r.Pub.Publish(ctx, m.Topic, strconv.FormatInt(m.ID, 10), m.Payload); err != nil {
-			// 失败：attempts+1 并指数退避推迟；attempts 超阈值的行由告警/人工处理，不无限重试
-			backoff := time.Duration(1<<min(m.Attempts, 8)) * time.Second
-			logger.WarnCtx(ctx, "outbox publish failed", zap.Int64("id", m.ID), zap.Int("attempts", m.Attempts+1), zap.Error(err))
-			if _, uerr := tx.ExecContext(ctx, `UPDATE outbox SET attempts = attempts + 1, next_at = ? WHERE id = ?`,
-				time.Now().Add(backoff), m.ID); uerr != nil {
-				return 0, fmt.Errorf("defer outbox %d: %w", m.ID, uerr)
-			}
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE outbox SET status = 1 WHERE id = ?`, m.ID); err != nil {
-			return 0, fmt.Errorf("mark sent %d: %w", m.ID, err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-	return len(msgs), nil
-}
-```
-
-- `lockPending` 是 `SELECT id, topic, payload, attempts FROM outbox WHERE status = 0 AND next_at <= ? ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED`，多副本 relay 各自抢到不同的行；`Run` 循环在批满时立即继续，空闲时按 ticker 轮询。
-- 语义是 at-least-once：Publish 成功但 Commit 前崩溃会重投，消费端按 `outbox.id`（作为消息 key）幂等，见 go-mq-patterns。
-- 持锁期间做网络 IO，所以 Batch 小（≤ 100）、Publish 带 ≤ 2s 超时；表上建 `(status, next_at)` 索引，已发送的行定期归档，否则表只增不减拖慢 `SKIP LOCKED` 扫描。
-- 轮询延迟不可接受时改 CDC（Debezium/Canal 读 binlog 投递 outbox 表变更），语义不变。
 
 ## 对账与修复
 

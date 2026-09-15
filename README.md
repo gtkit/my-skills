@@ -66,7 +66,7 @@
 ## 文件布局与描述规范
 
 - `description` 只写"做什么 + 什么时候用"，每条 150 字以内。Claude Code 对全部 skill 描述有总字数预算，超出后靠后的 skill 描述会被截空、不再触发；触发词长尾与分工说明放正文。
-- 内容多的 skill 拆成"路由 + references/"：`SKILL.md` 只放核心规则、判断表、审查清单与"按任务读取"路由表，代码模板与逐版本速查放 `references/*.md`，按路由表只读本次任务需要的文件。已拆分：`use-modern-go`、`go-observability`、`go-gin-api`、`go-testing`、`go-security`、`go-mq-patterns`、`go-engineering-governance`、`senior-devops-engineer`。
+- 内容多的 skill 拆成"路由 + references/"：`SKILL.md` 只放核心规则、判断表、审查清单与"按任务读取"路由表，代码模板与逐版本速查放 `references/*.md`，按路由表只读本次任务需要的文件。判定标准：`SKILL.md` 超过 250 行，或含 3 段以上代码模板就拆。目前 22 个已拆，其余正文都在 300 行以内。
 - 同一条规则只在一处写全：审查四条（枚举输入域、回审调用方、契约反证、整段重读）完整版在 `go-review` 与 `go-enterprise-quality`，其他 skill 一句话引用。
 
 ## 全仓公共约定

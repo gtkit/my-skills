@@ -1,23 +1,14 @@
 ---
 name: planning-with-files
-description: File-based planning with task_plan.md, findings.md and progress.md as working memory, with session recovery after /clear. Use when asked to plan or break down a multi-step task needing more than 5 tool calls.
+description: File-based planning: task_plan.md, findings.md and progress.md as working memory on disk. Use when asked to plan or break down a multi-step task needing more than 5 tool calls.
 user-invocable: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch"
 hooks:
-  PreToolUse:
-    - matcher: "Write|Edit|Bash|Read|Glob|Grep"
-      hooks:
-        - type: command
-          command: "cat task_plan.md 2>/dev/null | head -30 || true"
   PostToolUse:
     - matcher: "Write|Edit"
       hooks:
         - type: command
           command: "echo '[planning-with-files] File updated. If this completes a phase, update task_plan.md status.'"
-  Stop:
-    - hooks:
-        - type: command
-          command: "SD=\"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/planning-with-files}/scripts\"; powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$SD/check-complete.ps1\" 2>/dev/null || sh \"$SD/check-complete.sh\""
 metadata:
   version: "2.16.1"
 ---
@@ -26,34 +17,14 @@ metadata:
 
 Work like Manus: Use persistent markdown files as your "working memory on disk."
 
-## FIRST: Check for Previous Session (v2.2.0)
-
-**Before starting work**, check for unsynced context from a previous session:
-
-```bash
-# Linux/macOS
-$(command -v python3 || command -v python) ${CLAUDE_PLUGIN_ROOT}/scripts/session-catchup.py "$(pwd)"
-```
-
-```powershell
-# Windows PowerShell
-& (Get-Command python -ErrorAction SilentlyContinue).Source "$env:USERPROFILE\.claude\skills\planning-with-files\scripts\session-catchup.py" (Get-Location)
-```
-
-If catchup report shows unsynced context:
-1. Run `git diff --stat` to see actual code changes
-2. Read current planning files
-3. Update planning files based on catchup + git diff
-4. Then proceed with task
-
 ## Important: Where Files Go
 
-- **Templates** are in `${CLAUDE_PLUGIN_ROOT}/templates/`
-- **Your planning files** go in **your project directory**
+- **Templates** are in `templates/` inside this skill directory.
+- **Your planning files** go in **your project directory**.
 
 | Location | What Goes There |
 |----------|-----------------|
-| Skill directory (`${CLAUDE_PLUGIN_ROOT}/`) | Templates, scripts, reference docs |
+| Skill directory | Templates |
 | Your project directory | `task_plan.md`, `findings.md`, `progress.md` |
 
 ### Keep planning files out of version control (mandatory)
@@ -101,6 +72,14 @@ Filesystem = Disk (persistent, unlimited)
 | `task_plan.md` | Phases, progress, decisions | After each phase |
 | `findings.md` | Research, discoveries | After ANY discovery |
 | `progress.md` | Session log, test results | Throughout session |
+
+## Resuming after a gap or `/clear`
+
+Planning files are the recovery mechanism. When resuming:
+
+1. Read all three planning files.
+2. Run `git diff --stat` to see what actually changed on disk since the plan was last updated.
+3. Reconcile the two — the files record intent, the diff records reality — and update the planning files before continuing.
 
 ## Critical Rules
 
@@ -199,27 +178,6 @@ If you can answer these, your context management is solid:
 - Simple questions
 - Single-file edits
 - Quick lookups
-
-## Templates
-
-Copy these templates to start:
-
-- [templates/task_plan.md](templates/task_plan.md) — Phase tracking
-- [templates/findings.md](templates/findings.md) — Research storage
-- [templates/progress.md](templates/progress.md) — Session logging
-
-## Scripts
-
-Helper scripts for automation:
-
-- `scripts/init-session.sh` — Initialize all planning files
-- `scripts/check-complete.sh` — Verify all phases complete
-- `scripts/session-catchup.py` — Recover context from previous session (v2.2.0)
-
-## Advanced Topics
-
-- **Manus Principles:** See [reference.md](reference.md)
-- **Real Examples:** See [examples.md](examples.md)
 
 ## Anti-Patterns
 
