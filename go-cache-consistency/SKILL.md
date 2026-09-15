@@ -1,6 +1,6 @@
 ---
 name: go-cache-consistency
-description: Go 服务的缓存一致性与缓存防护：Cache-Aside / Read-Through / Write-Behind 取舍、先更 DB 再删缓存的时序、延迟双删、binlog（Canal/Debezium）订阅失效、版本号防 ABA、缓存穿透（空值缓存、布隆过滤器）、击穿（singleflight、逻辑过期）、雪崩（TTL 抖动、多级缓存、降级限流）、热 key 与大 key 检测治理、本地缓存（otter）与多级缓存失效顺序、Redlock 争议与 fencing token、事务与缓存失效顺序。当用户提到缓存一致性、双删、延迟双删、缓存穿透、击穿、雪崩、布隆过滤器、singleflight、热 key、大 key、本地缓存、多级缓存、Redlock、fencing token、redsync 时触发。分工：go-redis 客户端用法、Lua、Pipeline、Streams 见 go-redis-patterns；DB 事务、乐观锁、outbox 见 go-data-consistency。
+description: Go 缓存一致性与防护：DB 与缓存的更新时序、延迟双删、binlog 失效、穿透/击穿/雪崩、热 key、多级缓存、Redlock 与 fencing token。设计或审查缓存读写路径时使用。
 ---
 
 # Go 缓存一致性与防护

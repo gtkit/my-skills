@@ -1,6 +1,6 @@
 ---
 name: go-data-consistency
-description: Go 服务的数据一致性与并发正确性模式。当用户讨论事务隔离级别（RC/RR/Serializable）、幻读、间隙锁、死锁（MySQL 1213 / Postgres 40001）与重试、悲观锁 SELECT FOR UPDATE（SKIP LOCKED/NOWAIT）、乐观锁 version 列、原子条件更新、幂等键状态机、Redis SetNX 幂等的缺陷、分布式事务（Saga、TCC、2PC/XA）、本地消息表 / Transactional Outbox、最终一致性、T+1 对账与差异修复时触发。分工：驱动/ORM/连接池/迁移等 DB 客户端用法见 go-database-patterns，缓存与 DB 一致性见 go-cache-consistency，MQ 消费侧幂等/顺序/重试见 go-mq-patterns。
+description: Go 数据一致性：隔离级别与幻读、死锁重试、悲观/乐观锁、幂等键状态机、Saga/TCC/Outbox、对账。设计事务边界、并发扣减、跨库或跨服务一致性时使用。
 ---
 
 # Go 数据一致性模式

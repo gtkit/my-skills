@@ -1,6 +1,6 @@
 ---
 name: go-concurrency
-description: Go 并发工程实践：goroutine 生命周期与退出路径、Go 内存模型与 -race 局限、context 传播（WithoutCancel / AfterFunc）、errgroup.SetLimit / semaphore 有界并发、可编译的 worker pool（关闭后 Submit 报错、panic 隔离、背压）、pipeline / fan-out / fan-in、singleflight、sync 原语（Mutex/RWMutex/Map/Pool/Once/Cond/atomic）准确适用条件、time.After 与 channel 泄漏、goleak 与 testing/synctest 测试。当用户提到 goroutine、channel、select、sync.Mutex、WaitGroup、errgroup、worker pool、并发限制、goroutine 泄漏、死锁、data race、singleflight 时触发。与 go-testing 的分工：并发测试工具用法见 go-testing，本 skill 讲并发代码本身怎么写对。
+description: Go 并发代码怎么写对：goroutine 生命周期、context 传播、有界并发、worker pool、pipeline、singleflight、sync 原语适用条件、泄漏与死锁。涉及 goroutine、channel、锁、data race 时使用。
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 ---
 

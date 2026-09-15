@@ -1,6 +1,6 @@
 ---
 name: use-modern-php
-description: 编写现代 PHP 代码的强制性规范指南。当用户编写任何 PHP 代码、要求 PHP 代码审查、PHP 重构、Laravel/Symfony 项目开发、或讨论 PHP 语法与最佳实践时，必须触发此 skill。即使用户没有明确提到"modern"或"现代"，只要涉及 PHP 代码生成、PHP 代码片段、PHP 函数/类编写、PHP 项目架构，都应触发。关键词包括但不限于：PHP、Laravel、Symfony、Composer、Eloquent、PHP 8、PHP 8.0+、PHP 8.1+、PHP 8.2+、PHP 8.3+、PHP 8.4+、PHP 8.5、enum、readonly、match、构造器属性提升、property hooks、非对称可见性、first-class callable、pipe operator、clone with、strict_types、PHP 代码审查、PHP 重构、PHP 升级。与 senior-php-engineer 的分工：本 skill 只管语法与语言特性的版本归属，运行时（PHP-FPM/OPcache/Octane）、框架、数据库与安全归 senior-php-engineer。
+description: 现代 PHP 语法与版本归属（PHP 8.0–8.5）：match、enum、readonly、property hooks、pipe operator、clone with 等，附实测报错原文。编写、审查或升级 PHP 代码时使用；运行时与框架归 senior-php-engineer。
 ---
 
 # Modern PHP Guidelines

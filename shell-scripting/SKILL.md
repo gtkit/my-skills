@@ -1,6 +1,6 @@
 ---
 name: shell-scripting
-description: Shell 脚本工程化与跨平台陷阱库。当用户编写、审查或调试 Shell/Bash/sh 脚本，涉及 set -euo pipefail、trap 清理、变量引用、word splitting、数组、字符串处理、mktemp 临时文件、信号处理、退出码、管道错误传递、getopts 参数解析、单实例锁、CPU 负载脚本的自毁保险（ulimit -t、看门狗）、shellcheck 静态检查，或遇到脚本在 macOS 与 Linux 上行为不一致（sed -i、date、stat、readlink、grep -P、xargs、flock、timeout、bash 3.2 与 4+/5 版本差异）时触发。触发关键词包括但不限于：shell 脚本、bash 脚本、sh 脚本、set -e、set -u、pipefail、trap、shellcheck、word splitting、IFS、mktemp、getopts、flock、BSD sed、GNU sed、macOS 脚本、脚本兼容性、部署脚本、CI 脚本、退出码、$?、"$@"、局部变量、数组遍历、unbound variable、ulimit、压测脚本、烤机脚本、CPU 负载。分工：运维场景（容器、K8s、监控、故障排查）见 senior-devops-engineer，本 skill 只负责脚本本身怎么写对。
+description: Shell/Bash 脚本怎么写对：set -e 失效点、引用与数组、trap 与信号、getopts、锁与超时、CPU 负载脚本的自毁保险、macOS/BSD 与 GNU 差异、bash 3.2 兼容。编写、审查或调试 Shell 脚本时使用。
 ---
 
 # Shell 脚本工程化

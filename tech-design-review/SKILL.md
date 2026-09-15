@@ -1,6 +1,6 @@
 ---
 name: tech-design-review
-description: 技术方案文档模板、ADR 模板、容量估算方法与方案评审清单。当用户要写或评审技术方案、设计文档、架构评审、方案评审、RFC、ADR（Architecture Decision Record）、技术选型对比、容量评估/容量估算、上线方案、回滚方案、灰度计划、数据迁移方案、里程碑拆分、非目标（non-goals）定义、风险评估，或说"帮我写个技术方案"、"这个设计文档有什么问题"、"帮我评审这个方案"、"QPS 怎么估"、"需要多少副本/连接数"时触发。语言无关；Go 落地细节见各 go-* skill（稳定性 go-stability-engineering、一致性 go-data-consistency、观测 go-observability、性能 go-performance），Go 架构判断见 senior-go-engineer。
+description: 技术方案文档与 ADR 模板、容量估算公式、评审清单与否决项，语言无关。写或评审技术方案、设计文档、RFC、上线与回滚方案，或估算 QPS/副本数/连接数时使用。
 ---
 
 # 技术方案与评审

@@ -1,29 +1,41 @@
 ---
 name: go-enterprise-quality
-description: 编写或修改 Go 代码时必须执行的企业级质量门禁流程：写前分析、编码标准、写后验证（build / vet / golangci-lint / govulncheck / race 测试）、调用方影响分析、契约反证测试、最终自查。当用户要求"按企业级标准写 Go 代码"、"写完帮我做质量检查"、"上线前自查"、"这个改动会不会影响调用方"、"Go 质量门禁"、"production-ready"，或在 Go 项目中新增 / 修改函数、handler、repository、worker 后需要验证时触发。与 go-review 的分工：go-review 是审查他人代码的维度清单，本 skill 是自己写代码时的执行流程；现代写法以 use-modern-go 为准；CI 中的 lint / vulncheck 配置归 go-engineering-governance。
+description: 自己写或改 Go 代码后的交付前验证：build/vet/lint/govulncheck、按改动引入的新失败模式回审调用方、契约声明反证、整段重读。用户要求质量检查、上线前自查或评估改动对调用方的影响时使用。
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 ---
 
 # Go 企业级质量门禁
 
-自己写或改 Go 代码时的五阶段执行流程，每一阶段都有可执行的命令或可对照代码核对的检查项。审查他人代码见 go-review；现代写法替换见 use-modern-go；lint / vulncheck 的 CI 配置见 go-engineering-governance。
+自己写或改 Go 代码后的交付前验证。验证深度随改动类型走，不给一行文案改动跑全套。审查他人代码见 go-review；现代写法替换见 use-modern-go；lint / vulncheck 的 CI 配置见 go-engineering-governance；测试写法见 go-testing。
 
 ## 核心规则
 
-1. 五个阶段按序执行，Phase 3 不可跳过——"能编译"不等于"能上线"。
-2. 每引入一个新失败模式，必须 grep 全部调用方并逐个确认（Phase 3.4）。
-3. 任何契约声明（幂等、线程安全、最多一次、有界、不阻塞）没有反证测试，就不许写进注释或文档（Phase 4）。
-4. 刚改过的代码是最高嫌疑：交付前重读整个函数与调用链，不只看新增行（Phase 5）。
+1. 先按下表判定改动类型，再做对应深度的验证；"能编译"不等于"能上线"，但注释改动也不需要 govulncheck。
+2. 每引入一个新失败模式，grep 全部调用方并逐个确认其错误分支是按新世界写的。
+3. 契约声明（幂等、线程安全、最多一次、有界、不阻塞）没有反证测试就不写进注释或文档。写测试要先经用户同意；用户不要测试，就删声明，不留无凭据的承诺。
+4. 刚改过的代码是最高嫌疑：交付前重读整个函数与调用链，不只看新增行。
 5. 日志一律 `github.com/gtkit/logger/v2` + `zap` 字段构造器（见 go-observability）；不新增标准库 `log`。
 
-## Phase 1：写前分析
+## 按改动类型选验证深度
+
+| 改动 | 做 | 不做 |
+|---|---|---|
+| 注释、日志文案、错误消息文本 | `go build` + `go vet` | 其余全部 |
+| 不改签名、不加错误路径的实现调整 | 上一行 + `golangci-lint` + 现有测试 `-race` + 整段重读 | 调用方回审 |
+| 新增 error 返回、部分成功、新超时、返回值含义变化、签名变化 | 上一行 + 调用方影响分析 | |
+| 触及锁、Once、CAS、channel 关闭，或写下任何契约声明 | 上一行 + 契约反证（先向用户确认要不要写测试） | |
+| 新增或升级依赖 | 上一行 + `govulncheck` | |
+
+一次改动落在多行时按最深的那一行做。判定结果写进交付说明的第一句。
+
+## 写前分析
 
 1. **读现有代码**：同包的错误处理风格（哨兵 / `*AppError`）、命名、日志方式、context 传递方式，新代码与之一致。
-2. **核对接口契约**：要实现的接口有哪些方法、文档里承诺了什么（是否允许并发调用、是否可重入）。
-3. **列出依赖方**：`grep -rn "包名\." --include="*.go"` 找出谁在用这个包，评估改动波及面。
-4. **读现有测试**：测试用什么风格（table-driven、testify、httptest、sqlmock），新测试沿用。
+2. **核对接口契约**：要实现的接口有哪些方法、文档承诺了什么（是否允许并发调用、是否可重入）。
+3. **列出依赖方**：`grep -rn "包名\." --include="*.go"` 找出谁在用这个包，评估波及面。
+4. **读现有测试**：用户要求补测试时沿用现有风格（table-driven、testify、httptest、sqlmock）。
 
-## Phase 2：编码标准（写代码时逐条对照）
+## 编码标准（写代码时逐条对照）
 
 ### 正确性
 - 每个 `error` 都被处理：返回、包装（`fmt.Errorf("...: %w", err)` 只在增加信息时）、或明确注释为何可忽略。
@@ -51,32 +63,22 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 - 受保护端点校验 JWT（`jwt.WithValidMethods`）；密码、token 不进日志、不进响应。
 - 用户可控路径用 `os.Root` / `filepath.IsLocal`。
 
-## Phase 3：写后验证（强制）
+## 写后验证命令
 
-### 3.1 编译
 ```bash
 go build ./...
-```
-失败立即修复，再往下走。
-
-### 3.2 静态分析
-```bash
 go vet ./...
-golangci-lint run ./...
-govulncheck ./...
+golangci-lint run ./...                      # 实现调整及以上
+go test -race -count=1 ./path/to/package/... # 实现调整及以上；只跑受影响的包
+govulncheck ./...                            # 新增或升级依赖时
 ```
+
 - `go vet` 的告警全部消除（`copylocks`、`lostcancel`、`printf`、`waitgroup`、`tests`、`stdversion` 都在默认集合里）。
-- `golangci-lint` 未安装：`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`（v2 模块路径；或按官方文档下载对应平台的二进制）。项目无配置文件时用默认 linter 集合即可，配置文件的治理见 go-engineering-governance。
+- `golangci-lint` 未安装：`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`（v2 模块路径）。项目无配置文件时用默认 linter 集合，配置文件的治理见 go-engineering-governance。
 - `govulncheck` 未安装：`go install golang.org/x/vuln/cmd/govulncheck@latest`。它只报告代码实际可达的漏洞函数，输出为空才算通过；有报告时升级依赖，升不了的写明原因。
+- `-race` 检测数据竞争；`-count=1` 禁用缓存保证真跑。测试失败先查是测试错还是代码错，不改断言凑绿。
 
-### 3.3 单元测试
-```bash
-go test -race -count=1 ./path/to/package/...
-```
-- `-race` 检测数据竞争；`-count=1` 禁用缓存保证真跑。
-- 全部通过才继续；失败先查是测试错还是代码错，不改断言凑绿。
-
-### 3.4 调用方影响分析（强制，每个被改函数执行一次）
+## 调用方影响分析（引入新失败模式时，每个被改函数执行一次）
 
 1. **列出改动引入的新失败模式**：新的 error 返回、部分成功（批量操作有的成功有的失败）、新超时、新并发交错、返回值含义变化（nil 从"不存在"变成"存在但为空"）。
 2. **grep 全部调用方**：
@@ -88,23 +90,11 @@ go test -race -count=1 ./path/to/package/...
 4. **签名变化**：新增参数的每个调用方传的值是否正确，而不是为了编译通过传零值。
 5. 结论写进交付说明：调用方列表、每个调用方"已适配 / 无需适配（理由）"。
 
-### 3.5 其他交叉验证
-- **接口实现**：`var _ Iface = (*Impl)(nil)` 编译期断言。
-- **数据流**：handler → service → repository → DB，字段名、类型、JSON tag 三层一致。
-- **配置**：新配置项有默认值；无硬编码 URL、端口、凭证。
-- **集成点**：改 handler 查路由注册与中间件链；改 repository 查事务边界与连接释放；改 worker 查重试、幂等、失败恢复。
+交叉验证随改动类型顺带做：改 handler 查路由注册与中间件链；改 repository 查事务边界与连接释放；改 worker 查重试、幂等、失败恢复；新接口实现加 `var _ Iface = (*Impl)(nil)`；新配置项有默认值、无硬编码 URL / 端口 / 凭证。
 
-## Phase 4：测试要求
+## 契约声明的反证
 
-### 必写的测试类型
-1. **单元测试**：table-driven；成功路径与每条错误路径都覆盖；外部依赖 mock。
-2. **边界测试**：按 Phase 3.4 之前先做的入参枚举——空输入、nil、超长、负值、极大值、重复值、路径元字符。
-3. **错误路径测试**：DB 连接失败、下游 5xx、超时、批量操作部分失败。
-4. **时间相关逻辑**：用 `testing/synctest`（Go 1.25+）虚拟时钟，不用真实 `time.Sleep` 等结果。
-
-### 契约声明必须有反证测试
-
-注释或文档里每写一句"并发安全""只执行一次""幂等""不阻塞"，就要有一个"该声明为假时必定失败"的测试。写不出这个测试，就删掉声明。最小示例（Go 1.27 实测：去掉 `sync.OnceValues` 后此测试在 `-race` 下失败，报 `load 执行了 100 次，契约要求 1 次`）：
+注释或文档里每写一句"并发安全""只执行一次""幂等""不阻塞"，就要有一个"该声明为假时必定失败"的测试。写测试前先问用户；用户不要，就删声明。最小示例（Go 1.27 实测：去掉 `sync.OnceValues` 后此测试在 `-race` 下失败，报 `load 执行了 100 次，契约要求 1 次`）：
 
 ```go
 // Loader.Init 契约：并发调用时 load 只执行一次，所有调用方拿到同一结果。
@@ -144,17 +134,12 @@ func TestLoader_Contract(t *testing.T) {
 }
 ```
 
-### 测试质量清单
-- [ ] 测试名描述场景（`TestX_EmptyInput_ReturnsErrInvalid`），不是 `TestX2`
-- [ ] 多输入组合用 table-driven；子测试之间无状态依赖
-- [ ] 资源用 `t.Cleanup` 释放；上下文用 `t.Context()`
-- [ ] 并发相关测试在 `-race` 下跑过
-- [ ] 断言失败信息含实际值与期望值
+用户要求补测试时，边界输入按入参枚举取（空输入、nil、超长、负值、极大值、重复值、路径元字符），时间逻辑用 `testing/synctest`；其余写法见 go-testing。
 
-## Phase 5：最终核验
+## 最终核验
 
-1. `go build ./...` 与 `go vet ./...` 再跑一次（Phase 3 之后可能又改了代码）。
-2. `go test -race -count=1 ./affected/package/...`。
+1. `go build ./...` 与 `go vet ./...` 再跑一次（验证阶段之后可能又改了代码）。
+2. 实现调整及以上：`go test -race -count=1 ./affected/package/...`。
 3. **重读整个被改函数与调用链**：不只看 diff 的 `+` 行，从函数第一行读到最后一行，再顺着调用链读一层。检查新增行是否改变了原有分支的前提——锁的范围、defer 的顺序、提前 return 是否跳过了清理、新加的 early return 是否让后面的 `Commit` 不再执行。
 4. **对照 use-modern-go 审查清单**过一遍新代码。
 5. 清理调试痕迹：临时打印、注释掉的代码、调试用的环境变量。
@@ -174,7 +159,7 @@ func TestLoader_Contract(t *testing.T) {
 | 数据竞争（`-race` 报告） | BLOCKER | 立即修复 |
 | 未处理的 error、goroutine 无退出路径 | CRITICAL | 完成前修复 |
 | 调用方未按新失败模式适配 | CRITICAL | 完成前修复 |
-| 契约声明无反证测试 | HIGH | 补测试或删声明 |
+| 契约声明无反证测试 | HIGH | 经用户同意补测试，否则删声明 |
 | `govulncheck` 报告可达漏洞 | HIGH | 升级依赖，否则写明原因 |
 | N+1、热路径分配 | HIGH | 优化或写明量化理由 |
 | 外部输入未判 nil / 未校验范围 | HIGH | 完成前修复 |

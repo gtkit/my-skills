@@ -1,6 +1,6 @@
 ---
 name: go-redis-patterns
-description: Go 中 go-redis/v9 的生产用法：UniversalClient 构造（单机/哨兵/Cluster）、超时与 MaxRetries 重试对非幂等命令的风险、连接池推导、redis.Hook/redisotel、数据结构选型与大 key 阈值、key 命名与序列化、Pipeline 与 TxPipeline、Cluster hash tag/CROSSSLOT、Lua 脚本（EVALSHA、限流、库存扣减）、SET NX 分布式锁与看门狗、Pub/Sub 与 Streams 消费组。当用户提到 go-redis、redis.Client、Redis Cluster、Lua/EVAL、Pipeline、分布式锁、Redis 限流、Pub/Sub、Streams、XREADGROUP、redis.Nil、大 key 时触发。分工：缓存一致性、穿透/击穿/雪崩、热 key、多级缓存、Redlock 争议见 go-cache-consistency；限流/熔断的整体策略见 go-stability-engineering。
+description: go-redis/v9 生产用法：客户端构造与超时重试、连接池、数据结构选型与大 key、Pipeline、Cluster 约束、Lua 脚本、SET NX 锁、Pub/Sub 与 Streams。在 Go 里读写 Redis 时使用；缓存一致性另见 go-cache-consistency。
 ---
 
 # Go Redis 模式（go-redis/v9）

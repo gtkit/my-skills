@@ -1,6 +1,6 @@
 ---
 name: planning-with-files-web
-description: Manus-style file-based planning for complex tasks in Claude.ai web environment. Creates task_plan.md, findings.md, and progress.md as persistent working memory. Use when asked to plan, break down, or organize any multi-step project, research task, coding project, document creation, or work requiring more than 5 tool calls. Also trigger when user says "plan this", "help me organize", "break this down", "track progress", or starts a complex build/research task. This skill ensures Claude doesn't lose track of goals, findings, or errors across long conversations.
+description: File-based planning for the Claude.ai web environment: task_plan.md, findings.md and progress.md as persistent memory. Use when asked to plan, organize or track a multi-step task in Claude.ai.
 ---
 
 # Planning with Files (Web Edition)

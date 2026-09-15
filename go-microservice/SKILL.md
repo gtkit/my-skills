@@ -1,6 +1,6 @@
 ---
 name: go-microservice
-description: Go 微服务的进程生命周期与服务间通信规范：优雅关闭（signal.NotifyContext、errgroup、Shutdown 与 k8s terminationGracePeriodSeconds/preStop 对齐）、/livez 与 /readyz 探针、幂等键状态机、http.Client 连接池与 otelhttp 传播、gRPC 拦截器/keepalive/status 映射/健康检查协议、超时预算逐跳传播、服务发现与 Service Mesh 选型。触发词：graceful shutdown、SIGTERM、readiness、liveness、startupProbe、idempotency key、http.Transport、MaxIdleConnsPerHost、gRPC interceptor、grpc-timeout、keepalive、grpc.health.v1、deadline propagation、Nacos、etcd、Consul、Istio。限流/熔断/重试/降级/发布策略见 go-stability-engineering；日志与 trace 初始化见 go-observability；事务与幂等存储实现见 go-data-consistency。
+description: Go 微服务进程边界：优雅关闭与 k8s 发布时序、/livez /readyz、幂等键、http.Client 连接池、gRPC 拦截器/keepalive/status 映射、超时预算逐跳传播、服务发现。处理服务启停、探针、服务间调用时使用。
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 ---
 

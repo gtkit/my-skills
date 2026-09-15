@@ -1,6 +1,6 @@
 ---
 name: openresty-patterns
-description: OpenResty / ngx_lua 生产级代码模式库，行为结论以 openresty 1.27.1.2 实测为准。当用户编写或审查 OpenResty、Nginx Lua、ngx_lua 代码，涉及执行阶段选择（access_by_lua / content_by_lua / log_by_lua / init_worker_by_lua）、共享字典 ngx.shared.DICT（incr/get_stale/lpush 队列）、lua-resty-lrucache、lua-resty-lock、cosocket（ngx.socket.tcp）、resty.redis 连接池、ngx.re 正则、cjson 序列化、ngx.exit 语义、ngx.ctx 生命周期、缓存击穿防护、worker 阻塞排查时触发。触发关键词包括但不限于：OpenResty、ngx_lua、lua-nginx-module、shared dict、shdict、lrucache、resty.lock、cosocket、set_keepalive、ngx.re、cjson、access_by_lua、content_by_lua、log_by_lua、init_worker_by_lua、balancer_by_lua、Kong、APISIX、网关缓存、缓存击穿、Lua 阻塞。与 senior-openresty-engineer 的分工：那个 skill 负责工程视角与决策（出站方式选型、timer/worker 模型、容量与锁、可观测性、热更新），本 skill 提供具体代码模式与逐条实测的 API 行为。
+description: OpenResty/ngx_lua 代码模式与实测 API 行为：执行阶段选择、shared dict、lrucache、resty.lock、cosocket 连接池、ngx.re、cjson、缓存击穿防护、worker 阻塞排查。编写或审查 Nginx 内 Lua 代码时使用。
 ---
 
 # OpenResty 生产模式库
@@ -389,6 +389,8 @@ access_by_lua_block { require("waf").run() }
 ```
 
 ## 审查清单
+
+与 senior-openresty-engineer 的分工：那边负责工程视角与决策（出站方式选型、timer/worker 模型、容量与锁、可观测性、热更新），本文提供具体代码模式与逐条实测的 API 行为；与 Nginx 无关的纯 Lua/LuaJIT 问题见 senior-lua-engineer。
 
 - [ ] `log_by_lua` / `header_filter` / `body_filter` 里没有 cosocket、`ngx.sleep`、`ngx.req.read_body`
 - [ ] `ngx.exit` 均写成 `return ngx.exit(...)`；filter 阶段没有依赖 exit 终止执行的代码

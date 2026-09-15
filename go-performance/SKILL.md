@@ -1,6 +1,6 @@
 ---
 name: go-performance
-description: Go 性能分析与优化。当用户涉及 pprof（CPU / heap / goroutine / mutex / block profile）、火焰图读法、go tool trace、FlightRecorder、GC 调优（GOMEMLIMIT / GOGC / SetMemoryLimit）、GOMAXPROCS 与容器 CPU limit、PGO、逃逸分析（-gcflags=-m）、分配优化（sync.Pool / strings.Builder / strconv.Append / unique / fieldalignment）、Benchmark 与 benchstat，或线上 CPU 打满、内存持续上涨、goroutine 暴涨、延迟毛刺排查时触发。关键词：pprof、flame graph、-diff_base、runtime/trace、GOMEMLIMIT、GOGC、PGO、default.pgo、escape analysis、moved to heap、b.Loop、benchstat、fieldalignment、ReadMemStats。分工：数据库查询与连接池性能见 go-database-patterns；CI 中的 PGO 采集流程与 lint 门禁见 go-engineering-governance；runtime 指标暴露到 Prometheus 见 go-observability。
+description: Go 性能分析与优化：pprof 与火焰图读法、go tool trace、GC 调优（GOMEMLIMIT/GOGC）、GOMAXPROCS、PGO、逃逸分析、分配优化、Benchmark 与 benchstat。排查 CPU/内存/延迟问题或做优化前后对比时使用。
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 ---
 

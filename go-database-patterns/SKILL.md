@@ -1,6 +1,6 @@
 ---
 name: go-database-patterns
-description: Go 数据访问层的驱动、ORM、查询正确性与运维模式。当用户在 Go 里操作 MySQL/Postgres，涉及 database/sql、pgx、go-sql-driver/mysql、sqlx、sqlc、GORM、ent、bun 的选型与用法、DSN 参数、连接池参数（SetMaxOpenConns/ConnMaxLifetime）、db.Stats 监控、Repository 实现、排序与列名白名单防注入、rows.Err、RowsAffected、软删除、GORM 陷阱（Session 链式复用、Updates 零值、Save、Preload vs Joins、PrepareStmt、AutoMigrate）、keyset 分页、索引与 EXPLAIN、golang-migrate、gh-ost/pt-osc 大表变更、dbresolver 读写分离与复制延迟、ctx 超时与 statement_timeout、建表规范、sqlmock/testcontainers 数据库测试时触发。分工：事务隔离/死锁/乐观锁/Saga/outbox 见 go-data-consistency，缓存一致性见 go-cache-consistency，慢 SQL 日志与 metrics 接入见 go-observability。
+description: Go 数据访问层：database/sql、pgx、sqlx、sqlc、GORM 选型与陷阱、DSN 与连接池参数、查询正确性、keyset 分页、索引、迁移与大表变更、读写分离。在 Go 里操作 MySQL/Postgres 时使用。
 ---
 
 # Go 数据库访问模式

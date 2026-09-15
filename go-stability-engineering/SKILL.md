@@ -1,6 +1,6 @@
 ---
 name: go-stability-engineering
-description: Go 服务稳定性工程：超时预算与逐跳递减、重试（退避/抖动/预算/单层重试）、熔断（sony/gobreaker/v2）、限流（令牌桶/滑动窗口/漏桶、单机 vs 分布式、自适应）、隔仓与背压、负载卸载、降级与预案、灰度/金丝雀/自动回滚、k8s 发布时序、SLO/错误预算/多窗口 burn-rate 告警、RED/USE 指标、容量评估与压测、GOMEMLIMIT、故障演练与混沌。触发词：timeout budget、retry、backoff、jitter、circuit breaker、gobreaker、rate limit、x/time/rate、bulkhead、semaphore、load shedding、backpressure、degrade、fallback、feature flag、canary、rollback、maxSurge、SLO、SLI、error budget、burn rate、capacity、压测、chaos。错误可重试性分类见 go-error-handling；metrics/日志/trace 的实现见 go-observability；优雅关闭与探针实现见 go-microservice。
+description: Go 服务稳定性：超时预算、重试退避、熔断、限流、隔仓与背压、负载卸载、降级预案、灰度与回滚、SLO 与 burn-rate 告警、容量评估与压测。设定这些参数或设计故障兜底时使用。
 ---
 
 # Go 稳定性工程

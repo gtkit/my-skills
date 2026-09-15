@@ -1,6 +1,6 @@
 ---
 name: go-review
-description: Go 代码专项审查专家。当用户粘贴 Go 代码、Go diff、Go PR 变更、或上传 .go 文件并要求审查时触发。触发关键词包括但不限于："帮我 review 这段 Go 代码"、"Go code review"、"审查这个 Go 函数"、"这段 Go 代码有没有问题"、"Go 代码有没有坑"、"帮我看看这个 handler"、"review 一下这个 middleware"、"这个 goroutine 安全吗"、"帮我检查并发问题"。当用户粘贴的代码明确是 Go 语言（包含 package、func、import、go 关键字等），且意图是审查而非编写时，即使未明确说"review"也应触发。与通用 code-review skill 的区别：本 skill 深入 Go 运行时语义、并发模型、内存模型、标准库惯用法、GORM/Gin/go-redis/gobreaker/gorilla 等生态库的已知陷阱；现代写法替换项以 use-modern-go 为准，自己写代码时的门禁流程见 go-enterprise-quality。
+description: 审查 Go 代码：输入域枚举与调用方回审、并发/错误/资源/安全等七维度、置信度过滤、附修复代码。用户贴出 Go 代码、diff 或 PR 要求 review、找问题、查并发安全时使用。
 ---
 
 # Go 代码专项审查

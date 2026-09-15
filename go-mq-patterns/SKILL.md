@@ -1,6 +1,6 @@
 ---
 name: go-mq-patterns
-description: Go 消息队列生产级模式库：Kafka / RocketMQ / NATS JetStream / RabbitMQ 的客户端选型、投递语义与消费端工程实现。当用户编写或审查 MQ 生产者、消费者、消费者组代码，涉及消费幂等、顺序消息、分区键、重试与死信队列（DLQ）、毒丸消息、事务消息 / 半消息回查、延迟消息、消息积压与 lag、位点 / offset 提交、rebalance、at-least-once / exactly-once、Outbox、消费者优雅关闭时触发。触发关键词包括但不限于：Kafka、franz-go、kgo、sarama、kafka-go、RocketMQ、rocketmq-client-go、NATS、JetStream、RabbitMQ、amqp091、消息队列、MQ、消费者组、consumer group、幂等消费、顺序消费、重试、死信、DLQ、事务消息、延迟消息、积压、lag、offset、位点提交、at-least-once、exactly-once、Outbox、本地消息表。分工：Outbox / 本地消息表与 DB 事务的实现见 go-data-consistency；限流、熔断、退避的通用策略见 go-stability-engineering；错误分类接口见 go-error-handling。
+description: Go 消息队列：Kafka/RocketMQ/NATS/RabbitMQ 客户端选型、投递语义、消费幂等、顺序、重试与死信、位点提交、事务消息、延迟消息、积压。编写或审查 MQ 生产者、消费者代码时使用。
 ---
 
 # Go 消息队列模式
@@ -21,6 +21,18 @@ MQ 客户端选型、投递语义与消费端实现（幂等、顺序、重试�
 9. 消息头固定携带 message-id、traceparent、schema-version；正文超 1 MB 走对象存储 + 引用。
 10. 需要同步结果、强一致读、或日消息量在万级以内且已有 DB 的场景，不引入 MQ。
 
+## 按任务读取
+
+以下内容按任务读取，只读本次需要的文件；核心规则与审查清单已覆盖其结论。
+
+| 任务 | 读 |
+|---|---|
+| 写消费者：franz-go 骨架、位点提交、优雅关闭 | `references/consumer.md` |
+| 重试、死信与毒丸处理 | `references/retry-dlq.md` |
+| 消费幂等（`ConsumeOnce`） | `references/idempotency.md` |
+| 事务消息与 Outbox | `references/outbox.md` |
+| 写生产者与 trace 传递 | `references/producer.md` |
+
 ## 选型
 
 | 系统 / 客户端 | 版本（发布） | 适合 | 不适合 / 陷阱 |
@@ -39,7 +51,7 @@ MQ 客户端选型、投递语义与消费端实现（幂等、顺序、重试�
 - at-least-once：处理完再提交，崩溃重复。所有业务消息的默认。
 - exactly-once：Kafka 事务（`kgo.TransactionalID` + `GroupTransactSession`）只覆盖"消费 Kafka → 写 Kafka"闭环；处理逻辑一旦写 DB / 调 HTTP，事务覆盖不到，重复照样出现。对外部副作用，**幂等消费是唯一可靠的 exactly-once**。
 - 幂等键：优先生产端生成的业务消息 ID（订单号 + 事件类型）写进消息头；`topic-partition-offset` 只在同一 topic 内唯一，重放到新 topic 后失效。
-- 幂等落点：与业务同一 DB 事务的唯一约束（下文 `ConsumeOnce`）优于 Redis `SET NX`——进程在 SETNX 之后、业务提交之前崩溃，键留下了业务没做，要再补"处理完置成功态"的第二阶段（见 go-data-consistency）。
+- 幂等落点：与业务同一 DB 事务的唯一约束（`references/idempotency.md` 的 `ConsumeOnce`）优于 Redis `SET NX`——进程在 SETNX 之后、业务提交之前崩溃，键留下了业务没做，要再补"处理完置成功态"的第二阶段（见 go-data-consistency）。
 
 ## 位点提交与 rebalance
 
@@ -48,315 +60,11 @@ MQ 客户端选型、投递语义与消费端实现（幂等、顺序、重试�
 - 关停时提交不能用已取消的 ctx（最后一批白处理），用 `context.WithoutCancel(ctx)` + 独立短超时。
 - 一批只提交一次，中途崩溃重放 ≤ 批大小：这是吞吐与重复量的取舍，靠幂等兜底，不靠逐条提交。
 
-## 消费者骨架（franz-go）
-
-```go
-// Handler 处理单条消息。返回 nil 表示"已处理或已安全停入死信"，位点可以前进；
-// 返回 error 表示"无法安全前进"（如死信写入也失败），本批不提交并退出进程，交给编排器重启。
-type Handler func(ctx context.Context, rec *kgo.Record) error
-
-var errHandlerTimeout = errors.New("handler 超时")
-
-type Consumer struct {
-	cl      *kgo.Client
-	handle  Handler
-	m       *Metrics
-	workers int           // 并发处理的分区数上限（分区内仍串行）
-	timeout time.Duration // 单条消息处理超时，覆盖重试全程
-}
-
-func New(brokers []string, group string, topics []string, h Handler, m *Metrics) (*Consumer, error) {
-	cl, err := kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
-		kgo.ConsumerGroup(group),
-		kgo.ConsumeTopics(topics...),
-		kgo.DisableAutoCommit(),                         // 处理完再提交：at-least-once 的前提
-		kgo.BlockRebalanceOnPoll(),                      // 处理期间不 rebalance，避免把位点提交到已不属于自己的分区
-		kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()), // 无位点时从最新开始；补数场景改 AtStart
-		kgo.OnPartitionsRevoked(func(ctx context.Context, cl *kgo.Client, _ map[string][]int32) {
-			// 分区被收回前把已处理位点刷出去，否则新 owner 从旧位点重放
-			if err := cl.CommitUncommittedOffsets(ctx); err != nil {
-				logger.WarnCtx(ctx, "revoke 时提交位点失败", zap.Error(err))
-			}
-		}),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("kafka client: %w", err)
-	}
-	return &Consumer{cl: cl, handle: h, m: m, workers: 8, timeout: 30 * time.Second}, nil
-}
-
-// Run 阻塞到 ctx 取消：停止拉取 → 处理完已拉到的消息 → 提交位点 → 离开消费组。
-func (c *Consumer) Run(ctx context.Context) error {
-	defer c.cl.CloseAllowingRebalance() // 开了 BlockRebalanceOnPoll 就必须用这个 Close
-	for {
-		fetches := c.cl.PollRecords(ctx, 500) // 有界：一次最多 500 条，限制在途量与内存
-		if fetches.IsClientClosed() {
-			return nil
-		}
-		fetches.EachError(func(topic string, p int32, err error) {
-			if !errors.Is(err, context.Canceled) {
-				logger.ErrorCtx(ctx, "fetch 失败", zap.String("topic", topic), zap.Int32("partition", p), zap.Error(err))
-			}
-		})
-		if err := c.processBatch(ctx, fetches); err != nil {
-			return fmt.Errorf("本批未提交，退出重启: %w", err)
-		}
-		// 提交不能用已取消的 ctx，否则关停时最后一批白处理
-		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		err := c.cl.CommitUncommittedOffsets(cctx)
-		cancel()
-		if err != nil {
-			logger.ErrorCtx(ctx, "提交位点失败", zap.Error(err)) // 下次循环会连同新位点一起重提
-		}
-		c.cl.AllowRebalance()
-		if ctx.Err() != nil {
-			return nil
-		}
-	}
-}
-
-// processBatch 分区间并发、分区内串行——这是 Kafka 唯一的有序单位。
-func (c *Consumer) processBatch(ctx context.Context, fetches kgo.Fetches) error {
-	base := context.WithoutCancel(ctx) // 在途消息不因关停被半路打断，靠单条超时兜底
-	var g errgroup.Group
-	g.SetLimit(c.workers)
-	fetches.EachPartition(func(p kgo.FetchTopicPartition) {
-		if len(p.Records) == 0 {
-			return
-		}
-		g.Go(func() error {
-			last := p.Records[len(p.Records)-1]
-			c.m.lag.WithLabelValues(p.Topic, strconv.Itoa(int(p.Partition))).Set(float64(p.HighWatermark - last.Offset - 1))
-			for _, rec := range p.Records {
-				if err := c.processOne(base, rec); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-	})
-	return g.Wait()
-}
-
-func (c *Consumer) processOne(ctx context.Context, rec *kgo.Record) (err error) {
-	start := time.Now()
-	result := "ok"
-	defer func() {
-		if r := recover(); r != nil { // 最后一道防线：handler 之外的 panic 不能带走整个进程
-			result = "panic"
-			err = fmt.Errorf("handler panic: %v", r)
-			logger.ErrorCtx(ctx, "handler panic", zap.Any("panic", r), zap.ByteString("stack", debug.Stack()))
-		}
-		c.m.processed.WithLabelValues(rec.Topic, result).Inc()
-		c.m.duration.WithLabelValues(rec.Topic).Observe(time.Since(start).Seconds())
-	}()
-	hctx, cancel := context.WithTimeoutCause(ctx, c.timeout, errHandlerTimeout)
-	defer cancel()
-	hctx = ExtractTrace(hctx, rec)
-	if err = c.handle(hctx, rec); err != nil {
-		result = "error"
-		logger.ErrorCtx(hctx, "消费失败", zap.String("topic", rec.Topic),
-			zap.Int32("partition", rec.Partition), zap.Int64("offset", rec.Offset), zap.Error(err))
-	}
-	return err
-}
-```
-
-- 分区间并发（`errgroup.SetLimit`）、分区内串行——分区是 Kafka 唯一的有序单位。按 key 再拆 worker 只在分区内消息互不相关时才值得。
-- `PollRecords` 在 ctx 取消或客户端关闭时注入带错误的假 fetch（go doc），循环靠 `IsClientClosed()` 与 `ctx.Err()` 退出，已拉到的消息处理完再走。
-- `processOne` 的 recover 是最后防线；handler 自己的 panic 在 `WithRetry` 里转成 Permanent 进死信。
-- 指标 `Metrics` 由 `promauto.With(reg)` 建：`mq_consume_total{topic,result}`、`mq_consume_duration_seconds{topic}`、`mq_consumer_lag_records{topic,partition}`；label 不放 key 与消息 ID。
-
-## 重试与死信
-
-```go
-// Permanent 标记不可重试的错误（参数非法、业务规则拒绝、反序列化失败），实现 go-error-handling 的
-// Retryable() 接口；生产代码直接复用那里的 Permanent() / IsRetryable()，这里只为示例自包含。
-type Permanent struct{ Err error }
-
-func (p Permanent) Error() string   { return p.Err.Error() }
-func (p Permanent) Unwrap() error   { return p.Err }
-func (p Permanent) Retryable() bool { return false }
-
-// retryable：显式标记优先；未标记的错误（网络、超时、下游 5xx、死锁）默认可重试——
-// 与 go-error-handling 的"默认不重试"相反，因为这里的重试有界且以死信收尾，误重试的代价只是几次退避。
-func retryable(err error) bool {
-	if r, ok := errors.AsType[interface {
-		error
-		Retryable() bool
-	}](err); ok {
-		return r.Retryable()
-	}
-	return true
-}
-```
-
-```go
-// WithRetry 把 handler 包成"有界重试 + 指数退避 + 死信"。重试在原分区原地进行，不破坏顺序；
-// 退避期间该分区后续消息被阻塞，所以 maxAttempts 次退避总和必须远小于单条超时与 RebalanceTimeout（默认 60s）。
-// 单条超时到期（ctx.Done）同样进死信：一条慢消息不能让消费者退出重启、无限重放。
-func WithRetry(h Handler, dlq *DLQ, maxAttempts int, base time.Duration) Handler {
-	maxAttempts, base = max(maxAttempts, 1), max(base, time.Millisecond) // 0/负值：至少调一次 handler；rand.N(0) 会 panic
-	return func(ctx context.Context, rec *kgo.Record) error {
-		var err error
-		for attempt := 1; ; attempt++ {
-			if err = safeCall(h, ctx, rec); err == nil {
-				return nil
-			}
-			if !retryable(err) || attempt == maxAttempts {
-				break
-			}
-			select {
-			case <-time.After(base<<(attempt-1) + rand.N(base)): // 指数退避 + 抖动，避免同批消息同时重试
-			case <-ctx.Done():
-				err = fmt.Errorf("%w（最后一次错误: %w）", context.Cause(ctx), err)
-			}
-			if ctx.Err() != nil {
-				break
-			}
-		}
-		// 死信用独立 ctx：走到这里 ctx 可能已因单条超时到期。写失败必须上抛——此时不能提交位点，否则消息就丢了
-		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if derr := dlq.Send(dctx, rec, maxAttempts, err); derr != nil {
-			return fmt.Errorf("死信写入失败（原错误 %v）: %w", err, derr)
-		}
-		return nil
-	}
-}
-
-// safeCall 把 handler 的 panic 转成 Permanent 错误：panic 是代码 bug，重试也不会好，直接进死信。
-func safeCall(h Handler, ctx context.Context, rec *kgo.Record) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = Permanent{Err: fmt.Errorf("panic: %v", r)}
-		}
-	}()
-	return h(ctx, rec)
-}
-```
-
-- 分类先于重试：反序列化失败、参数非法、业务规则拒绝是 Permanent，重试 100 次结果一样，直接进死信；网络、超时、5xx、死锁可重试。判定走 `Retryable() bool` 接口（go-error-handling），MQ 侧对未标记错误默认重试，因为重试有界且以死信收尾。
-- 原地重试保顺序但阻塞该分区后续消息：`maxAttempts` 次退避总和必须小于单条超时；单条超时到期也进死信让位点前进，死信写入用 `WithoutCancel` + 独立超时——否则一条慢消息就让消费者退出重启、无限重放同一条。
-- `DLQ.Send` 原样转存 Key/Value，头里追加 `x-origin-topic/partition/offset`、`x-attempts`、`x-error`；重放工具按头回放到原 topic，不直接改 DB。
-- RocketMQ 把这套做在服务端：返回 `consumer.ConsumeRetryLater` 进 `%RETRY%<group>` 按延迟等级递增重投，客户端 `MaxReconsumeTimes` 默认 -1 即取 16 次（源码）后进 `%DLQ%<group>`；顺序消费返回 `SuspendCurrentQueueAMoment` 原地重试。NATS：`Nak()` 立即重投、`NakWithDelay`、`Term()` 终止投递，`MaxDeliver` 配 `BackOff` 列表。RabbitMQ：`Nack(requeue=false)` 进 DLX，quorum 队列用 `x-delivery-limit` 限次。
-
-## 消费幂等
-
-```go
-// processed_messages(msg_id PRIMARY KEY, consumed_at) 与业务写入在同一事务里：
-// 要么"标记 + 业务"一起提交，要么一起回滚，不存在"业务成了标记没写"的窗口。
-const insertMark = `INSERT INTO processed_messages (msg_id, consumed_at) VALUES ($1, NOW()) ON CONFLICT (msg_id) DO NOTHING`
-
-// ConsumeOnce 以 msgID 为幂等键执行 apply；重复消息返回 ErrDuplicate，调用方按成功处理（提交位点）。
-func ConsumeOnce(ctx context.Context, db *sql.DB, msgID string, apply func(ctx context.Context, tx *sql.Tx) error) error {
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }() // Commit 成功后 Rollback 返回 ErrTxDone，忽略即可
-	res, err := tx.ExecContext(ctx, insertMark, msgID)
-	if err != nil {
-		return fmt.Errorf("标记消息: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("rows affected: %w", err)
-	}
-	if n == 0 {
-		return ErrDuplicate
-	}
-	if err := apply(ctx, tx); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-```
-
-- 标记与业务写入同一事务，不存在"业务成了标记没写"或反过来的窗口。MySQL 用 `INSERT IGNORE`。
-- `ErrDuplicate` 对消费者是成功：位点照常提交。标记表按 `consumed_at` 清理，保留期大于最长可能的重放跨度。
-
-## 事务消息与 Outbox
-
-RocketMQ 事务消息 = 半消息（消费者不可见）→ 本地事务 → Commit/Rollback；客户端没回应时 broker 回查 `CheckLocalTransaction`（broker 侧默认半消息 6s 后开始回查、每 30s 一次、最多 15 次：`transactionTimeOut` / `transactionCheckInterval` / `transactionCheckMax`，BrokerConfig 源码）。
-
-```go
-// orderTxListener 实现事务消息的两个回调。半消息先到 broker（消费者不可见），
-// 本地事务成功才 Commit 让消息可见；本地事务结果未知时 broker 会回查。
-type orderTxListener struct{ db *sql.DB }
-
-func (l *orderTxListener) ExecuteLocalTransaction(msg *primitive.Message) primitive.LocalTransactionState {
-	// 本地事务必须把 msg 的业务键（如 msg.GetKeys()）一起落库，回查才有依据
-	if err := l.createOrder(context.Background(), msg); err != nil {
-		logger.Error("本地事务失败", zap.String("keys", msg.GetKeys()), zap.Error(err))
-		return primitive.RollbackMessageState
-	}
-	return primitive.CommitMessageState
-}
-
-func (l *orderTxListener) CheckLocalTransaction(msg *primitive.MessageExt) primitive.LocalTransactionState {
-	var n int
-	err := l.db.QueryRowContext(context.Background(), `SELECT COUNT(1) FROM orders WHERE order_no = $1`, msg.GetKeys()).Scan(&n)
-	switch {
-	case err != nil:
-		return primitive.UnknowState // 查不出来就继续 Unknown，等下一次回查；不要在不确定时 Rollback
-	case n > 0:
-		return primitive.CommitMessageState
-	default:
-		return primitive.RollbackMessageState
-	}
-}
-
-func NewTxProducer(nameServers []string, group string, db *sql.DB) (rocketmq.TransactionProducer, error) {
-	return rocketmq.NewTransactionProducer(&orderTxListener{db: db},
-		producer.WithNsResolver(primitive.NewPassthroughResolver(nameServers)),
-		producer.WithGroupName(group),
-		producer.WithRetry(2),
-	)
-}
-```
-
-- 回查查不出就返回 `UnknowState` 等下次，不能因为查询失败 Rollback；本地事务必须把消息业务键落库，否则回查无据。
-- Kafka 没有半消息。"写 DB + 发消息"的原子性用 Outbox：业务事务内写 outbox 表，relay 轮询或 CDC 发到 Kafka 后标记已发。relay 的失败模式：发成功但标记失败 → 重发（消费端幂等兜底）；多 relay 并发 → `SELECT ... FOR UPDATE SKIP LOCKED` 或单实例主备。实现见 go-data-consistency。
-
 ## 延迟消息
 
 - RocketMQ 4.x `WithDelayTimeLevel(1..18)`：1s 5s 10s 30s 1m 2m … 10m 20m 30m 1h 2h 固定等级（go doc），不能任意时刻；5.x `SetDelayTimestamp` 任意时刻。
 - Kafka 原生无延迟：按档位建 `delay-5m`、`delay-1h` 等 topic，专用消费者读到未到期消息就 `PauseFetchPartitions` 等待再转投目标 topic（同档位 topic 内先进先到期，队头未到期后面必未到期）；任意时刻延迟用 DB / Redis ZSET 做时间轮再投 Kafka。
 - NATS `NakWithDelay` 是重投延迟不是业务延迟；RabbitMQ 用 `x-delayed-message` 插件或 TTL + DLX。
-
-## 生产端与 trace 传递
-
-```go
-func NewProducer(brokers []string) (*kgo.Client, error) {
-	return kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
-		kgo.RequiredAcks(kgo.AllISRAcks()),                                          // 默认即 all；显式写出防止被改成 leader ack
-		kgo.RecordDeliveryTimeout(30*time.Second),                                   // 默认无限期：broker 不可用时消息会无限堆在内存里
-		kgo.MaxBufferedRecords(10_000),                                              // 缓冲上限，满了 Produce 阻塞而不是吃光内存
-		kgo.ProducerLinger(5*time.Millisecond),                                      // 攒批 5ms 换吞吐；默认 0
-		kgo.RecordPartitioner(kgo.UniformBytesPartitioner(64<<10, true, true, nil)), // 与默认相同：有 key 按 murmur2 哈希（同 key 同分区），无 key 按字节数粘性；显式写出防止被改成随机
-	)
-}
-```
-
-```go
-// InjectTrace 生产端：把当前 span 写进消息头；ExtractTrace 消费端：恢复上游 span 作为父节点。
-// 未初始化 TracerProvider/Propagator 时两者都是 no-op（初始化见 go-observability）。
-func InjectTrace(ctx context.Context, rec *kgo.Record) {
-	otel.GetTextMapPropagator().Inject(ctx, headerCarrier{rec})
-}
-
-func ExtractTrace(ctx context.Context, rec *kgo.Record) context.Context {
-	return otel.GetTextMapPropagator().Extract(ctx, headerCarrier{rec})
-}
-```
-
-- `RecordDeliveryTimeout` 默认无限（go doc）：broker 不可用时消息无限堆内存、调用方永不报错。`MaxBufferedRecords` 默认 10,000，满了 `Produce` 阻塞（go doc）。
-- 幂等生产默认开启（go doc），关掉才会因重试在 broker 端产生重复；不要为"性能"关。
-- 批上限 `ProducerBatchMaxBytes` 默认 1,000,012 字节，对应 broker `max.message.bytes`（go doc）。大消息放对象存储，消息只带 URL + 摘要。
-- `headerCarrier` 实现 `propagation.TextMapCarrier`，把 `traceparent`/`tracestate` 放消息头；Propagator 未初始化时两端都是 no-op，初始化见 go-observability。
 
 ## 积压处理
 

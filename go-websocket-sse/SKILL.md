@@ -1,6 +1,6 @@
 ---
 name: go-websocket-sse
-description: Go 实时推送：WebSocket（gorilla/websocket、coder/websocket、gobwas/ws 选型）与 SSE 的生产实现——选型决策、升级前鉴权与 Origin 校验、单读单写规则、纯 actor Hub 与 SendToUser、背压策略、心跳与中间层超时对齐、优雅关闭 1001、入站消息治理、Redis Pub/Sub 水平扩展、连接数与 fd 上限、Last-Event-ID 补发、WriteTimeout 与长连接冲突。用户提到 WebSocket、SSE、EventSource、长连接、实时推送、Hub、广播、心跳、断线重连时触发。限流算法见 go-stability-engineering，Pub/Sub 客户端见 go-redis-patterns，metrics 初始化见 go-observability。
+description: Go 长连接推送：WebSocket 与 SSE 选型、升级前鉴权、单读单写、actor Hub、背压、心跳与中间层超时、优雅关闭、Redis 水平扩展、Last-Event-ID 补发。实现或审查实时推送时使用。
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: go-error-handling
-description: Go 错误处理规范：AppError 类型（Error/Unwrap/Is）、错误码分段、HTTP 状态映射、可重试分类、ctx 取消处理、errors.Join、panic 边界、wrap 边界与 lint。当用户设计 Go 错误类型、错误码体系、统一错误响应、重试判定，或提到 errors.Is/As/AsType、fmt.Errorf %w、sentinel error、custom error、error code、recover 时触发。go-gin-api 引用本文件的 AppError，不自行定义；重试/熔断算法见 go-stability-engineering。
+description: Go 错误处理：AppError 类型、错误码分段与 HTTP 状态映射、可重试分类、ctx 取消映射、errors.Join、panic 与 wrap 边界。设计错误类型、错误码体系、统一错误响应或重试判定时使用。
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 ---
 

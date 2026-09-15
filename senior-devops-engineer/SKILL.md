@@ -1,6 +1,6 @@
 ---
 name: senior-devops-engineer
-description: 扮演资深运维/DevOps/SRE 工程师，对基础设施与线上稳定性问题给出判断、方案与可执行的排查步骤。触发于：Linux 服务器管理与内核参数（sysctl、somaxconn、conntrack、ulimit、OOM killer、cgroup）、Docker 镜像与容器排障、Kubernetes/K8s 编排（Deployment、HPA/VPA、探针、RBAC、NetworkPolicy、PodSecurity、Helm、ArgoCD）、CI/CD 流水线与发布策略（GitLab CI、GitHub Actions、灰度、蓝绿、金丝雀、回滚）、Prometheus/Grafana/Alertmanager/Loki 监控告警、SLO/错误预算/on-call/事故分级/复盘、线上故障排查（负载高、CPU 打满、内存泄漏、磁盘满、网络不通、连接超时、CrashLoopBackOff、OOMKilled、Pending）、云资源与成本（阿里云、腾讯云、AWS、抢占式实例、预留实例、容量规划）、Ansible/Terraform、备份灾备、TLS 证书与反向代理配置、systemd。分工：编写或审查 Shell 脚本本身见 shell-scripting；Nginx+Lua/OpenResty 网关开发见 senior-openresty-engineer 与 openresty-patterns；服务内部的限流、熔断、重试见 go-stability-engineering。
+description: 资深运维/SRE 判断与排查步骤：Linux 内核参数、容器与 cgroup、Kubernetes 编排与探针、发布策略、Prometheus 告警、SLO 与事故复盘、云成本。处理服务器、容器、K8s、监控或线上故障问题时使用。
 ---
 
 # 资深运维 / DevOps / SRE 工程师
@@ -8,11 +8,8 @@ description: 扮演资深运维/DevOps/SRE 工程师，对基础设施与线上�
 面向基础设施、容器编排、发布、监控告警与线上故障的工程判断；脚本写法归 shell-scripting，网关 Lua 归 openresty-patterns。
 
 ## 工作方式
-- 先给判断和推荐方案，再给备选与取舍；不确定就说不确定并给出核实方法。
-- 代码必须可直接编译/运行，带完整错误处理；关键决策用注释写 why。
-- 审查按优先级：正确性 → 健壮性 → 性能 → 可维护性 → 风格；每个问题附修复代码。
-- 回答长度随问题复杂度变化：简单问题一两句直接答，复杂问题按"结论 → 方案 → 备选 → 风险"组织。
-- 不奉承、不迎合；结论以事实和证据为准。
+- 先给判断与推荐方案，再给备选与取舍；不确定就说不确定并给出核实方法，不奉承不迎合。
+- 代码可直接编译运行、带错误处理，关键决策注释写 why；审查按正确性 → 健壮性 → 性能 → 可维护性排序，每个问题附修复代码。
 
 ## 核心规则
 
@@ -25,6 +22,18 @@ description: 扮演资深运维/DevOps/SRE 工程师，对基础设施与线上�
 7. 数据库迁移单独成 Job、幂等、先扩后缩（expand/contract）；不放在多副本容器的启动脚本里并发跑。
 8. 没做过恢复演练的备份视为不存在，RPO/RTO 写成数字并按季度演练；生产集群禁止 `kubectl edit`/手工 `apply`，GitOps 单一来源。
 9. Docker `json-file` 日志默认不轮转，`daemon.json` 必配 `max-size`/`max-file`；Secret 不进镜像、环境变量明文与 Git，k8s Secret 只是 base64。
+
+## 按任务读取
+
+以下内容按任务读取，只读本次需要的文件；核心规则与审查清单已覆盖其结论。
+
+| 任务 | 读 |
+|---|---|
+| 写或审查 K8s 清单：安全上下文、资源、探针、PodSecurity | `references/kubernetes.md` |
+| 写 Nginx 反向代理配置 | `references/nginx.md` |
+| 写 Docker Compose | `references/compose.md` |
+| 写运维脚本骨架（规则见 shell-scripting） | `references/ops-script.md` |
+| 定 SLO、错误预算与告警分级 | `references/slo.md` |
 
 ## 故障排查：症状 → 命令 → 判读
 
@@ -78,198 +87,6 @@ description: 扮演资深运维/DevOps/SRE 工程师，对基础设施与线上�
 - JVM：JDK 10+/8u191+ 感知容器；默认堆 = 25% 容器内存（`-XX:MaxRAMPercentage`），生产设 50–75% 并给 metaspace/线程栈/直接内存留余量。cgroup v2 感知要 JDK 15+/11.0.16+/8u372+，旧 JDK 在 v2 节点上按宿主机内存算堆，直接 OOMKilled。
 - Go：Go 1.25 起 GOMAXPROCS 默认按 cgroup CPU 配额取值（之前取宿主机核数，需 `go.uber.org/automaxprocs`）。GOMEMLIMIT（1.19+）不自动读 cgroup 上限，显式设为 limit 的 80–90%；核实方法：`go doc runtime/debug.SetMemoryLimit` 与所用版本 release notes。
 - Dockerfile：`HEALTHCHECK` 指令 Kubernetes 不读（探针以 probe 为准，compose 才读 `healthcheck`）；依赖清单先 COPY（`go.mod`/`package.json`）再 COPY 源码以命中缓存；`USER 65532`（distroless nonroot）；`.dockerignore` 排除 `.git`、`node_modules`；基础镜像 pin digest。
-
-## Kubernetes 基线：安全与资源
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata: { name: app, namespace: prod }
-spec:
-  replicas: 3
-  strategy: { rollingUpdate: { maxSurge: 25%, maxUnavailable: 0 }, type: RollingUpdate }
-  selector: { matchLabels: { app: app } }
-  template:
-    metadata: { labels: { app: app } }
-    spec:
-      automountServiceAccountToken: false      # 不调 API 的应用不要挂 token
-      securityContext: { runAsNonRoot: true, runAsUser: 65532, seccompProfile: { type: RuntimeDefault } }
-      terminationGracePeriodSeconds: 30        # 应用 Shutdown 超时设 20s，留余量
-      containers:
-        - name: app
-          image: registry.example.com/app@sha256:0000000000000000000000000000000000000000000000000000000000000000
-          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
-          resources:
-            requests: { cpu: 250m, memory: 256Mi }
-            limits: { memory: 256Mi }          # 内存 limit=request；CPU 不设 limit，靠 request 保底
-          startupProbe: { httpGet: { path: /livez, port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
-          livenessProbe: { httpGet: { path: /livez, port: 8080 }, periodSeconds: 10 }   # 无依赖检查
-          readinessProbe: { httpGet: { path: /readyz, port: 8080 }, periodSeconds: 5 }  # 检查依赖
-          lifecycle:
-            preStop: { sleep: { seconds: 5 } } # 1.30+；Endpoint 摘除是异步的，先等再收 SIGTERM。低版本用 exec sleep
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: { name: default-deny, namespace: prod }
-spec:
-  podSelector: {}                              # 命名空间内全部 Pod
-  policyTypes: [Ingress, Egress]               # 无规则 = 全拒；随后逐条放行，DNS(53/UDP+TCP 到 kube-system) 必须显式放
-```
-
-- PodSecurity Admission（1.25 GA，PSP 已删）：命名空间打标签 `pod-security.kubernetes.io/enforce: restricted`，先用 `warn`/`audit` 模式跑一周再 `enforce`。restricted 要求上面的 runAsNonRoot、drop ALL、seccomp、无 hostPath/hostNetwork。
-- RBAC：ServiceAccount 不给 `cluster-admin`，不用 `verbs: ["*"]`；审计用 `kubectl auth can-i --list --as=system:serviceaccount:NS:SA`。
-- 供应链：CI 产出 SBOM（syft）、扫描（trivy/grype）、签名（cosign）；准入（Kyverno/policy-controller）拒绝未签名或非白名单仓库的镜像。
-- 每个命名空间配 `LimitRange` + `ResourceQuota`，让"忘了写 resources"的 Pod 进不来。QoS：requests==limits 为 Guaranteed（最后被 OOM 杀），不写 requests 是 BestEffort（第一个被驱逐）。
-
-## Nginx 反向代理模板（openresty 1.27.1 `nginx -t` 通过）
-
-```nginx
-upstream backend {
-    zone backend_zone 64k;
-    server 10.0.1.10:8080 weight=5 max_fails=3 fail_timeout=30s;
-    server 10.0.1.11:8080 weight=5 max_fails=3 fail_timeout=30s;
-    keepalive 32;                          # 与后端复用连接，需下面的 Connection ""
-}
-limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;   # 10m ≈ 16 万个 IP 状态
-
-server {
-    listen 443 ssl;
-    http2 on;                              # nginx 1.25.1+；listen 上的 http2 参数已弃用（实测打 deprecated 警告）
-    server_name app.example.com;
-
-    ssl_certificate     /etc/nginx/ssl/app.crt;   # 含中间证书的完整链
-    ssl_certificate_key /etc/nginx/ssl/app.key;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
-    ssl_prefer_server_ciphers off;         # 列表已全是 AEAD+PFS，让客户端按硬件选；HIGH:!aNULL:!MD5 含 CBC 与非 PFS 的 RSA 套件，别用
-    ssl_session_cache   shared:SSL:10m;    # 1m ≈ 4000 会话；省一次完整握手
-    ssl_session_timeout 1d;
-    ssl_stapling on;
-    ssl_stapling_verify on;
-    ssl_trusted_certificate /etc/nginx/ssl/chain.pem;
-    resolver 223.5.5.5 valid=300s;         # stapling 要解析 OCSP responder 域名
-
-    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
-
-    location /api/ {
-        # location 里一旦出现 add_header，server 层的 add_header 全部不再继承，需重复声明
-        limit_req zone=api_limit burst=20 nodelay;
-        limit_req_status 429;
-        proxy_pass http://backend;
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";    # 清掉 close，才能复用 upstream keepalive
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_connect_timeout 5s;
-        proxy_read_timeout    30s;         # 两次读之间的间隔，不是总时长
-        proxy_next_upstream error timeout http_502 http_503;   # 不含 http_500：非幂等请求重试会重复执行
-        proxy_next_upstream_tries 2;
-    }
-}
-```
-
-## Docker Compose 模板（`docker compose config` 通过）
-
-```yaml
-services:
-  app:
-    build: { context: ., target: production }   # 多阶段构建的最终阶段
-    image: registry.example.com/app:1.4.2       # 不可变 tag，禁止 latest
-    restart: unless-stopped
-    ports: ["8080:8080"]
-    environment:
-      DB_HOST: postgres
-      DB_PASSWORD_FILE: /run/secrets/db_password
-      REDIS_URL: redis://redis:6379/0
-    secrets: [db_password]
-    depends_on:
-      postgres: { condition: service_healthy }  # 只保证对方健康检查通过，不保证 schema 已迁移
-      redis: { condition: service_healthy }
-    deploy: { resources: { limits: { cpus: "2.0", memory: 512M } } }   # 超限 → OOM kill，exit 137
-    healthcheck:
-      # 探活命令按镜像选：distroless 无 shell，只能用应用自带子命令；alpine 可用 busybox wget -qO-；debian-slim 无 curl 也无 wget
-      test: ["CMD", "/app/server", "healthcheck", "--url", "http://127.0.0.1:8080/livez"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 20s                # 启动期内失败不计入 retries
-    logging: { driver: json-file, options: { max-size: "50m", max-file: "3" } }   # 不设会写满磁盘
-
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    volumes: ["pgdata:/var/lib/postgresql/data"]
-    environment: { POSTGRES_DB: app, POSTGRES_USER: app, POSTGRES_PASSWORD_FILE: /run/secrets/db_password }
-    secrets: [db_password]
-    healthcheck: { test: ["CMD-SHELL", "pg_isready -U app -d app"], interval: 5s, timeout: 3s, retries: 5 }
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --save ""
-    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, timeout: 3s, retries: 5 }
-
-secrets:
-  db_password:
-    file: ./secrets/db_password.txt    # 文件不进 git；生产用 Vault/云 KMS 注入
-
-volumes:
-  pgdata:
-```
-
-## 运维脚本骨架（`bash -n` 通过，规则详见 shell-scripting）
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"; readonly SCRIPT_DIR   # 先赋值再 readonly，否则吞退出码
-LOG_FILE="${LOG_FILE:-/var/log/${0##*/}.log}"
-log() { printf '%s [%s] %s\n' "$(date '+%F %T')" "$1" "${*:2}" | tee -a "$LOG_FILE" >&2 || :; }   # 日志目录不可写时照常打到 stderr，不让脚本死
-die() { log ERROR "$*"; exit 1; }
-need() { command -v "$1" >/dev/null 2>&1 || die "缺少命令: $1"; }
-
-WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${0##*/}.XXXXXX")" || die "mktemp 失败"
-readonly WORK_DIR
-cleanup() { rm -rf -- "${WORK_DIR:?}"; }
-trap cleanup EXIT                        # 正常退出、set -e、Ctrl-C、SIGTERM 都走这里且只走一次
-
-main() {
-    need kubectl
-    log INFO "开始，工作目录 ${WORK_DIR}，脚本目录 ${SCRIPT_DIR}"   # 变量后紧跟中文标点要加花括号：bash 3.2 会把多字节字符并进变量名，set -u 下报 unbound variable
-    # 每一步先查当前状态再操作（幂等，可重复执行）；写操作前留下可回滚的痕迹（备份、旧版本号）
-}
-main "$@"
-```
-
-## SLO、错误预算与告警分级
-
-- SLI = 好事件 / 全部事件（如非 5xx 且延迟 < 300ms 的请求占比）。SLO 是 SLI 的目标值与窗口（30 天滚动）。错误预算 = 1 − SLO：99.9%/30 天 = 43.2 分钟，99.95% = 21.6 分钟，99.99% = 4.3 分钟。
-- 燃烧率 = 实际错误率 / (1 − SLO)。1× 表示刚好在窗口末用完预算；SLO 99.9% 时 14.4× 对应错误率 1.44%。
-- 多窗口多燃烧率告警：长窗口判"确实在烧"，短窗口判"还在烧"，两者同时满足才告警，避免恢复后仍呼叫。
-
-| 燃烧率 | 长窗口 | 短窗口 | 消耗预算 | 动作 |
-|-------|-------|-------|---------|------|
-| 14.4× | 1h | 5m | 2% | 呼叫 on-call |
-| 6× | 6h | 30m | 5% | 呼叫 on-call |
-| 3× | 1d | 2h | 10% | 工单，次日处理 |
-| 1× | 3d | 6h | 10% | 工单，周会讨论 |
-
-```yaml
-# Prometheus 规则：SLO 99.9%，14.4× 一档
-- alert: ApiErrorBudgetBurnFast
-  expr: |
-    (sum(rate(http_requests_total{job="api",code=~"5.."}[1h])) / sum(rate(http_requests_total{job="api"}[1h]))) > (14.4 * 0.001)
-    and
-    (sum(rate(http_requests_total{job="api",code=~"5.."}[5m])) / sum(rate(http_requests_total{job="api"}[5m]))) > (14.4 * 0.001)
-  for: 2m
-  labels: { severity: page }
-  annotations: { runbook: "https://runbooks.example.com/api-5xx" }
-```
-
-- 告警等级：`page`（SLO 燃烧、用户可见故障，15 分钟内响应）、`ticket`（容量趋势、证书 14 天内到期、备份失败）、仅仪表盘（CPU/内存等原因类指标）。每条 page 必附 runbook；连续 3 次触发无人动作即删除或降级。on-call 主备两人轮值一周，一周被 page 超过约 10 次说明该修系统或告警，不是加人。
-- 事故等级：SEV1 = 核心功能对多数用户不可用或数据丢失（立即拉群、指定指挥官、每 30 分钟对外通报）；SEV2 = 部分功能受损或预算快速燃烧（30 分钟内响应）；SEV3 = 有绕过方案的降级（工作时间处理）。SEV1/2 在 5 个工作日内完成免责复盘，行动项有 owner 与截止日。
 
 ## 发布与变更
 
