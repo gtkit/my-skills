@@ -107,7 +107,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.models import Order, Product
 
-engine = create_async_engine("postgresql+asyncpg://app:secret@db/app", pool_pre_ping=True)
+engine = create_async_engine("postgresql+asyncpg://app:<password>@db/app", pool_pre_ping=True)
 # expire_on_commit=False：async 下 commit 后再访问属性会触发隐式加载并抛 MissingGreenlet
 SessionFactory = async_sessionmaker(engine, expire_on_commit=False)
 

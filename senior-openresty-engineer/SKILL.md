@@ -19,7 +19,7 @@ description: OpenResty/ngx_lua 工程决策：阶段模型与 API 边界、timer
 4. 每个 cosocket 显式 `settimeouts(connect, send, read)`；不设则由 `lua_socket_connect_timeout`/`send`/`read` 决定，默认 60s（文档值；实测把指令设为 500ms 后未设超时的 `connect` 在 0.502s 返回 `timeout`）。
 5. `init_worker_by_lua` 在每个 worker 各执行一次；全局只需一份的 timer（拉配置、上报聚合指标）用 `ngx.worker.id() == 0` 守卫。`init_by_lua` 里 `ngx.worker.id()` 也返回 0（实测），不能用它判断"是否在 worker 中"。
 6. 生产禁止 `lua_code_cache off`：每个请求重新加载全部 Lua 文件，启动即打 `[alert] lua_code_cache is off; this will hurt performance`（实测）。代码变更用 `nginx -s reload` 平滑替换 worker；需要不 reload 变更的只有配置数据，放 shared dict/远端拉取。
-7. 出站 HTTP 首选 `proxy_pass`（Nginx 原生连接池与重试）；Lua 内需要调用第三方 HTTP 用 `lua-resty-http`（非自带，需安装）；`ngx.location.capture` 只能访问本 server 的 location，用于组合内部接口。
+7. 出站 HTTP 首选 `proxy_pass`（Nginx 原生连接池与重试）；Lua 内需要调用第三方 HTTP 用 `lua-resty-http`（非自带，项目必须声明安装方式、固定版本、校验方式和缺失时的停止/降级处理；技能本身不自动安装）；`ngx.location.capture` 只能访问本 server 的 location，用于组合内部接口。
 8. `ngx.exit(status)` 在 rewrite/access/content 阶段之后的代码不会执行，`pcall` 也拦不住（实测 403 直接返回、后续 `ngx.log` 未触发）；在 `header_filter` 里 `ngx.exit` 会返回、后续代码继续执行（实测）。统一写 `return ngx.exit(...)`，在 `header_filter`/`balancer` 阶段这是必需的；`body_filter` 里没有 `ngx.exit`，调用即报 `API disabled in the context of body_filter_by_lua*`（实测）。
 9. shared dict 的每次操作都在一把该 dict 的互斥锁下串行（跨 worker）；高频读的配置放 worker 级 `lrucache`，用 shared dict 只存版本号做失效。
 10. 5xx 不回显上游/内部错误细节；`ngx.log(ngx.ERR, ...)` 记录原因并带 `ngx.var.request_id`，响应只给错误码。

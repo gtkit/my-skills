@@ -1,0 +1,424 @@
+schema: 1
+source_of_truth: SKILL.md
+last_reviewed: 2026-10-18
+skills:
+  - name: backend-acceptance
+    status: active
+    platforms: [claude, codex]
+    description: "Use for backend audits and release gates covering business rules, transactions, idempotency, authorization, security, data integrity, and performance."
+    ui_metadata: true
+    references:
+      - references/backend-audit-matrix.md
+      - references/cross-language-cases.md
+    templates: []
+    scripts: []
+  - name: code-simplifier
+    status: active
+    platforms: [claude, codex]
+    description: "在行为等价的前提下重构代码以降低理解成本。用户贴出代码要求简化、重构、去重、降低嵌套、改善命名或可读性时使用；追求更快更省的性能优化不在此列。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: frontend-acceptance
+    status: active
+    platforms: [claude, codex]
+    description: "Use for evidence-based audits or release gates of Vue/React frontends; build success or screenshots alone are insufficient."
+    ui_metadata: true
+    references:
+      - references/acceptance-matrix.md
+    templates: []
+    scripts: []
+  - name: go-cache-consistency
+    status: active
+    platforms: [claude, codex]
+    description: "Go 缓存一致性与防护：DB 与缓存的更新时序、延迟双删、binlog 失效、穿透/击穿/雪崩、热 key、多级缓存、Redlock 与 fencing token。设计或审查缓存读写路径时使用。"
+    ui_metadata: false
+    references:
+      - references/hot-big-key.md
+      - references/lock.md
+      - references/read-path.md
+      - references/write-path.md
+    templates: []
+    scripts: []
+  - name: go-concurrency
+    status: active
+    platforms: [claude, codex]
+    description: "Go 并发代码怎么写对：goroutine 生命周期、context 传播、有界并发、worker pool、pipeline、singleflight、sync 原语适用条件、泄漏与死锁。涉及 goroutine、channel、锁、data race 时使用。"
+    ui_metadata: false
+    references:
+      - references/bounded.md
+      - references/leaks.md
+      - references/lifecycle.md
+      - references/pipeline.md
+      - references/testing.md
+    templates: []
+    scripts: []
+  - name: go-data-consistency
+    status: active
+    platforms: [claude, codex]
+    description: "Go 数据一致性：隔离级别与幻读、死锁重试、悲观/乐观锁、幂等键状态机、Saga/TCC/Outbox、对账。设计事务边界、并发扣减、跨库或跨服务一致性时使用。"
+    ui_metadata: false
+    references:
+      - references/deadlock-retry.md
+      - references/idempotency.md
+      - references/locking.md
+      - references/outbox.md
+    templates: []
+    scripts: []
+  - name: go-database-patterns
+    status: active
+    platforms: [claude, codex]
+    description: "Go 数据访问层：database/sql、pgx、sqlx、sqlc、GORM 选型与陷阱、DSN 与连接池参数、查询正确性、keyset 分页、索引、迁移与大表变更、读写分离。在 Go 里操作 MySQL/Postgres 时使用。"
+    ui_metadata: false
+    references:
+      - references/gorm.md
+      - references/migration.md
+      - references/pool.md
+      - references/repository.md
+      - references/testing.md
+    templates: []
+    scripts: []
+  - name: go-engineering-governance
+    status: active
+    platforms: [claude, codex]
+    description: "Go 工程治理：golangci-lint v2 配置、CI 门禁、go.mod 依赖治理、apidiff 与 API 兼容、发布纪律、PGO 流程、项目布局。配置 lint、搭 CI、治理依赖、评估破坏性变更或准备发版时使用。"
+    ui_metadata: false
+    references:
+      - references/ci.md
+      - references/golangci.md
+      - references/makefile.md
+    templates: []
+    scripts: []
+  - name: go-enterprise-quality
+    status: active
+    platforms: [claude, codex]
+    description: "用于当前用户请求的 Go 源码行为修改、质量检查、上线前自查或调用方影响评估，执行对应深度的 build/vet/lint、契约反证与回审。纯问答、输出示例、文档/注释/配置说明修改不触发，不自动续跑旧任务。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: go-error-handling
+    status: active
+    platforms: [claude, codex]
+    description: "Go 错误处理：AppError 类型、错误码分段与 HTTP 状态映射、可重试分类、ctx 取消映射、errors.Join、panic 与 wrap 边界。设计错误类型、错误码体系、统一错误响应或重试判定时使用。"
+    ui_metadata: false
+    references:
+      - references/apperror.md
+      - references/classify.md
+      - references/middleware.md
+      - references/panic.md
+      - references/wrap.md
+    templates: []
+    scripts: []
+  - name: go-gin-api
+    status: active
+    platforms: [claude, codex]
+    description: "用 Gin 写生产级 REST API：http.Server 超时与优雅关闭、中间件栈、DTO 校验、JWT、CORS、幂等写接口、健康检查、Recovery。编写或审查 Gin 服务、handler、middleware、路由时使用。"
+    ui_metadata: false
+    references:
+      - references/auth.md
+      - references/idempotency.md
+      - references/request.md
+      - references/server.md
+    templates: []
+    scripts: []
+  - name: go-microservice
+    status: active
+    platforms: [claude, codex]
+    description: "Go 微服务进程边界：优雅关闭与 k8s 发布时序、/livez /readyz、幂等键、http.Client 连接池、gRPC 拦截器/keepalive/status 映射、超时预算逐跳传播、服务发现。处理服务启停、探针、服务间调用时使用。"
+    ui_metadata: false
+    references:
+      - references/deadline.md
+      - references/grpc.md
+      - references/health.md
+      - references/http-client.md
+      - references/idempotency.md
+      - references/shutdown.md
+    templates: []
+    scripts: []
+  - name: go-mq-patterns
+    status: active
+    platforms: [claude, codex]
+    description: "Go 消息队列：Kafka/RocketMQ/NATS/RabbitMQ 客户端选型、投递语义、消费幂等、顺序、重试与死信、位点提交、事务消息、延迟消息、积压。编写或审查 MQ 生产者、消费者代码时使用。"
+    ui_metadata: false
+    references:
+      - references/consumer.md
+      - references/idempotency.md
+      - references/outbox.md
+      - references/producer.md
+      - references/retry-dlq.md
+    templates: []
+    scripts: []
+  - name: go-observability
+    status: active
+    platforms: [claude, codex]
+    description: "Go 日志/metrics/tracing 的唯一实现处：gtkit/logger 初始化与字段规范、request_id 与访问日志中间件、OpenTelemetry 接入、Prometheus RED 指标、慢 SQL、SLO 告警。接日志、埋点、trace 或写这些中间件时使用。"
+    ui_metadata: false
+    references:
+      - references/logging.md
+      - references/metrics.md
+      - references/middleware.md
+      - references/slow-sql.md
+      - references/tracing.md
+    templates: []
+    scripts: []
+  - name: go-performance
+    status: active
+    platforms: [claude, codex]
+    description: "Go 性能分析与优化：pprof 与火焰图读法、go tool trace、GC 调优（GOMEMLIMIT/GOGC）、GOMAXPROCS、PGO、逃逸分析、分配优化、Benchmark 与 benchstat。排查 CPU/内存/延迟问题或做优化前后对比时使用。"
+    ui_metadata: false
+    references:
+      - references/alloc.md
+      - references/benchmark.md
+      - references/escape.md
+      - references/gc.md
+      - references/pprof.md
+    templates: []
+    scripts: []
+  - name: go-redis-patterns
+    status: active
+    platforms: [claude, codex]
+    description: "go-redis/v9 生产用法：客户端构造与超时重试、连接池、数据结构选型与大 key、Pipeline、Cluster 约束、Lua 脚本、SET NX 锁、Pub/Sub 与 Streams。在 Go 里读写 Redis 时使用；缓存一致性另见 go-cache-consistency。"
+    ui_metadata: false
+    references:
+      - references/cache-wrapper.md
+      - references/client.md
+      - references/lock.md
+      - references/lua.md
+      - references/pipeline.md
+      - references/pubsub-streams.md
+    templates: []
+    scripts: []
+  - name: go-review
+    status: active
+    platforms: [claude, codex]
+    description: "审查 Go 代码：输入域枚举与调用方回审、并发/错误/资源/安全等七维度、置信度过滤、附修复代码。用户贴出 Go 代码、diff 或 PR 要求 review、找问题、查并发安全时使用。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: go-security
+    status: active
+    platforms: [claude, codex]
+    description: "Go Web 安全编码：TLS 与服务器硬化、JWT 与密钥轮换、密码哈希、IDOR、注入与输出编码、SSRF、解析炸弹、安全头与 CSRF、secret 管理、govulncheck。做鉴权、处理外部输入或做安全审查时使用。"
+    ui_metadata: false
+    references:
+      - references/auth.md
+      - references/browser.md
+      - references/input-output.md
+      - references/secrets.md
+      - references/transport.md
+    templates: []
+    scripts: []
+  - name: go-stability-engineering
+    status: active
+    platforms: [claude, codex]
+    description: "Go 服务稳定性：超时预算、重试退避、熔断、限流、隔仓与背压、负载卸载、降级预案、灰度与回滚、SLO 与 burn-rate 告警、容量评估与压测。设定这些参数或设计故障兜底时使用。"
+    ui_metadata: false
+    references:
+      - references/breaker.md
+      - references/bulkhead.md
+      - references/degrade.md
+      - references/ratelimit.md
+      - references/retry.md
+      - references/timeout.md
+    templates: []
+    scripts: []
+  - name: go-testing
+    status: active
+    platforms: [claude, codex]
+    description: "Go 测试写法与工具：表驱动与 t.Parallel、断言取舍、fake/mock、Gin handler 与出站 HTTP 测试、testcontainers、契约测试、-race/goleak/synctest、Fuzz、golden、Benchmark。写或改测试、治 flaky 时使用。"
+    ui_metadata: false
+    references:
+      - references/concurrency.md
+      - references/fuzz-golden-bench.md
+      - references/http.md
+      - references/integration.md
+      - references/unit.md
+    templates: []
+    scripts: []
+  - name: go-websocket-sse
+    status: active
+    platforms: [claude, codex]
+    description: "Go 长连接推送：WebSocket 与 SSE 选型、升级前鉴权、单读单写、actor Hub、背压、心跳与中间层超时、优雅关闭、Redis 水平扩展、Last-Event-ID 补发。实现或审查实时推送时使用。"
+    ui_metadata: false
+    references:
+      - references/capacity.md
+      - references/hub.md
+      - references/pumps.md
+      - references/sse.md
+      - references/upgrade.md
+    templates: []
+    scripts: []
+  - name: openresty-patterns
+    status: active
+    platforms: [claude, codex]
+    description: "OpenResty/ngx_lua 代码模式与实测 API 行为：执行阶段选择、shared dict、lrucache、resty.lock、cosocket 连接池、ngx.re、cjson、缓存击穿防护、worker 阻塞排查。编写或审查 Nginx 内 Lua 代码时使用。"
+    ui_metadata: false
+    references:
+      - references/blocking.md
+      - references/cache.md
+      - references/cosocket.md
+      - references/data.md
+      - references/exit.md
+      - references/shdict.md
+    templates: []
+    scripts: []
+  - name: planning-with-files
+    status: active
+    platforms: [claude, codex]
+    description: "Use for multi-step planning needing more than 5 tool calls; keep task_plan.md, findings.md, and progress.md on disk."
+    ui_metadata: false
+    references: []
+    templates:
+      - templates/findings.md
+      - templates/progress.md
+      - templates/task_plan.md
+    scripts: []
+  - name: planning-with-files-web
+    status: active
+    platforms: [claude-web]
+    description: "Use for multi-step planning in Claude.ai Web; keep task_plan.md, findings.md, and progress.md as persistent memory."
+    ui_metadata: false
+    references:
+      - references/manus-principles.md
+    templates:
+      - templates/findings.md
+      - templates/progress.md
+      - templates/task_plan.md
+    scripts:
+      - scripts/check-complete.sh
+      - scripts/check-status.sh
+      - scripts/init-session.sh
+  - name: senior-devops-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "资深运维/SRE 判断与排查步骤：Linux 内核参数、容器与 cgroup、Kubernetes 编排与探针、发布策略、Prometheus 告警、SLO 与事故复盘、云成本。处理服务器、容器、K8s、监控或线上故障问题时使用。"
+    ui_metadata: false
+    references:
+      - references/compose.md
+      - references/kubernetes.md
+      - references/nginx.md
+      - references/ops-script.md
+      - references/slo.md
+    templates: []
+    scripts: []
+  - name: senior-frontend-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "资深前端判断与可运行代码：Core Web Vitals、React/Vue 渲染与水合、现代 CSS 与兼容、Vite 构建与包体、前端安全、可访问性。涉及浏览器端页面、组件、样式、构建时使用；Node 服务端归 senior-nodejs-engineer。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: senior-go-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "Go 架构判断与方案取舍：必问的容量数字、单体与微服务判定、分层与包设计、泛型边界、存储/缓存/MQ 选型、分布式事务替代、稳定性预算、副本数估算。讨论 Go 项目设计、选型或评估方案时使用。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: senior-lua-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "资深 Lua/LuaJIT 判断与代码：5.1/LuaJIT 与 5.3/5.4 语义差异、table 边界、整数浮点、GC、FFI、沙箱、Redis EVAL 脚本。写或审查纯 Lua、宿主嵌入、游戏脚本、Redis 脚本时使用；Nginx 内 Lua 归 openresty 两个 skill。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: senior-nodejs-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "资深 Node.js 服务端判断与代码：进程生命周期与优雅关闭、ESM/CJS、事件循环阻塞与内存排查、Fastify/Express/NestJS、流与背压、数据库事务、npm 发包安全。写或审查 Node 服务端代码、排查线上问题时使用。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: senior-openresty-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "OpenResty/ngx_lua 工程决策：阶段模型与 API 边界、timer/worker 模型、出站方式选型、shared dict 容量与锁、balancer 重试、超时与连接池、热更新。设计网关、WAF 或评估 Nginx 内 Lua 方案时使用。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: senior-php-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "资深 PHP/Laravel 判断与代码：PHP-FPM/OPcache/Octane 运行时、Laravel 队列与事务锁、Eloquent 性能、安全、慢请求与超卖排查。写或审查 PHP/Laravel 代码、排查线上问题时使用。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: senior-python-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "资深 Python 判断与代码：GIL 与 free-threading、asyncio 阻塞边界、FastAPI/Django、SQLAlchemy async、打包分发、类型与 lint 工具链、安全。写或审查 Python 代码、设计 Python 服务时使用。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: senior-rust-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "资深 Rust 判断与可编译代码：所有权与生命周期设计、async/tokio 取消安全、内存序与并发原语、错误边界、2024 edition、unsafe 准则、Axum/sqlx、cargo 治理。写或审查 Rust 代码、设计 Rust 项目时使用。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: shell-scripting
+    status: active
+    platforms: [claude, codex]
+    description: "Shell/Bash 脚本怎么写对：set -e 失效点、引用与数组、trap 与信号、getopts、锁与超时、CPU 负载脚本的自毁保险、macOS/BSD 与 GNU 差异、bash 3.2 兼容。编写、审查或调试 Shell 脚本时使用。"
+    ui_metadata: false
+    references:
+      - references/cpu-load.md
+      - references/getopts-lock.md
+      - references/pipes-trap.md
+      - references/portability.md
+      - references/quoting.md
+      - references/set-e.md
+      - references/skeleton.md
+    templates: []
+    scripts: []
+  - name: tech-design-review
+    status: active
+    platforms: [claude, codex]
+    description: "技术方案文档与 ADR 模板、容量估算公式、评审清单与否决项，语言无关。写或评审技术方案、设计文档、RFC、上线与回滚方案，或估算 QPS/副本数/连接数时使用。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: use-modern-go
+    status: active
+    platforms: [claude, codex]
+    description: "现代 Go 写法的单一真源（目标 Go 1.27）：每个旧写法到新写法的条目标注版本，附审查清单。编写、审查或重构任何 Go 代码时使用；按 references 只读项目 go.mod 版本相关的部分。"
+    ui_metadata: false
+    references:
+      - references/go1.0-1.21.md
+      - references/go1.22-1.24.md
+      - references/go1.25-1.27.md
+    templates: []
+    scripts: []
+  - name: use-modern-php
+    status: active
+    platforms: [claude, codex]
+    description: "现代 PHP 语法与版本归属（PHP 8.0–8.5）：match、enum、readonly、property hooks、pipe operator、clone with 等，附实测报错原文。编写、审查或升级 PHP 代码时使用；运行时与框架归 senior-php-engineer。"
+    ui_metadata: false
+    references:
+      - references/php8.0-8.1.md
+      - references/php8.2-8.3.md
+      - references/php8.4-8.5.md
+    templates: []
+    scripts: []
+  - name: vue-frontend-engineer
+    status: active
+    platforms: [claude, codex]
+    description: "Use when building or changing Vue 3 apps with JavaScript/TypeScript, including components, routes, state, forms, APIs, tests, and browser behavior."
+    ui_metadata: true
+    references:
+      - references/async-and-api.md
+    templates: []
+    scripts: []

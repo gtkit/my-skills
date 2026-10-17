@@ -100,7 +100,7 @@
 - 日志一律 `github.com/gtkit/logger/v2`（包级 `*Ctx` 函数），字段构造器用 `go.uber.org/zap`。
 - `http.Server` 显式设置全部超时字段；`/livez` 不带依赖检查，`/readyz` 才带。
 - 哨兵错误用 `errors.Is`；5xx 不回显内部错误；金额用 `int64`（最小货币单位）或 decimal。
-- 每个 Go 代码块都对应一个 `go vet` 通过的验证文件；带"实测"标注的断言都有本机复现。
+- 新增或修改 Go 代码块要说明 Go 版本和独立模块 `go vet` 验证结果；验证模块不要求提交到 skill 仓库。带"实测"标注的断言必须有本机复现记录。
 
 ## 脚本
 
@@ -116,7 +116,7 @@
 - `AGENTS.md` 只记录修改分级、必读文件、校验命令和发布边界，不承载领域知识或动态状态。
 - `catalog.yaml` 记录 skill 的状态、适用平台、references 和 Codex UI 元数据；以各目录的 `SKILL.md` 为内容源。
 - `evals/routing.md` 记录应触发、不应触发和边界场景；场景推演不等同于真实模型评测。
-- 改动 skill 前先运行 `pwsh -File scripts/validate.ps1`；修改触发语义、授权边界或跨 skill 路由时，再按 `evals/routing.md` 做代表场景验证。
+- 改动 skill 前先运行 `pwsh -File scripts/validate.ps1`；修改触发语义、授权边界或跨 skill 路由时，先按 `evals/routing.md` 做静态推演，目标平台和工具可用时再做代表场景运行验证。
 
 ## 维护规则
 

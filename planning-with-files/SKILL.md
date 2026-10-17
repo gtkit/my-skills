@@ -41,7 +41,7 @@ fi
 ```
 
 - The rule goes only into the local, untracked `.git/info/exclude` — **never into the tracked `.gitignore`** (a tracked ignore rule would itself leak the tooling into the repository).
-- If any of the three files is already tracked, remove it from the index first (`git rm --cached <file>`) and then add the exclude entry.
+- If any of the three files is already tracked, stop and report it. Removing a tracked file from the index requires explicit authorization; do not run `git rm --cached` as an automatic planning step.
 - Before finishing a task, confirm with `git status --porcelain` that none of the three files shows up as untracked or modified.
 
 ## Quick Start

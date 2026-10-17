@@ -19,7 +19,7 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 
 1. 先按下表判定改动类型，再做对应深度的验证；"能编译"不等于"能上线"，但注释改动也不需要 govulncheck。
 2. 每引入一个新失败模式，grep 全部调用方并逐个确认其错误分支是按新世界写的。
-3. 契约声明（幂等、线程安全、最多一次、有界、不阻塞）没有反证测试就不写进注释或文档。写测试要先经用户同意；用户不要测试，就删声明，不留无凭据的承诺。
+3. 契约声明（幂等、线程安全、最多一次、有界、不阻塞）没有反证测试就不写成已证实的承诺。按用户请求和仓库测试门禁补测试；若补测试会扩大已授权范围，先说明范围。无法补测时将声明标为未证实并列出风险，不擅自删除用户已有文档。
 4. 刚改过的代码是最高嫌疑：交付前重读整个函数与调用链，不只看新增行。
 5. 日志一律 `github.com/gtkit/logger/v2` + `zap` 字段构造器（见 go-observability）；不新增标准库 `log`。
 
@@ -31,7 +31,7 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 | 日志文案、错误消息文本（涉及源码行为修改） | `go build` + `go vet` | 其余全部 |
 | 不改签名、不加错误路径的实现调整 | 上一行 + `golangci-lint` + 现有测试 `-race` + 整段重读 | 调用方回审 |
 | 新增 error 返回、部分成功、新超时、返回值含义变化、签名变化 | 上一行 + 调用方影响分析 | |
-| 触及锁、Once、CAS、channel 关闭，或写下任何契约声明 | 上一行 + 契约反证（先向用户确认要不要写测试） | |
+| 触及锁、Once、CAS、channel 关闭，或写下任何契约声明 | 上一行 + 契约反证；若测试会扩大用户请求范围，先说明范围 | |
 | 新增或升级依赖 | 上一行 + `govulncheck` | |
 
 一次改动落在多行时按最深的那一行做。判定结果写进交付说明的第一句。
@@ -82,8 +82,8 @@ govulncheck ./...                            # 新增或升级依赖时
 ```
 
 - `go vet` 的告警全部消除（`copylocks`、`lostcancel`、`printf`、`waitgroup`、`tests`、`stdversion` 都在默认集合里）。
-- `golangci-lint` 未安装：`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`（v2 模块路径）。项目无配置文件时用默认 linter 集合，配置文件的治理见 go-engineering-governance。
-- `govulncheck` 未安装：`go install golang.org/x/vuln/cmd/govulncheck@latest`。它只报告代码实际可达的漏洞函数，输出为空才算通过；有报告时升级依赖，升不了的写明原因。
+- `golangci-lint` 未安装：先报告该项未验证并继续可做的检查；只有用户明确授权安装时，才使用项目批准并固定版本的 v2 工具，不使用 `@latest`。项目无配置文件时用默认 linter 集合，配置文件的治理见 go-engineering-governance。
+- `govulncheck` 未安装：先报告该项未验证并继续可做的检查；只有用户明确授权安装时，才使用项目批准并固定版本的工具，不使用 `@latest`。它只报告代码实际可达的漏洞函数，输出为空才算通过；有报告时升级依赖，升不了的写明原因。
 - `-race` 检测数据竞争；`-count=1` 禁用缓存保证真跑。测试失败先查是测试错还是代码错，不改断言凑绿。
 
 ## 调用方影响分析（引入新失败模式时，每个被改函数执行一次）
@@ -169,7 +169,7 @@ func TestLoader_Contract(t *testing.T) {
 | 数据竞争（`-race` 报告） | BLOCKER | 立即修复 |
 | 未处理的 error、goroutine 无退出路径 | CRITICAL | 完成前修复 |
 | 调用方未按新失败模式适配 | CRITICAL | 完成前修复 |
-| 契约声明无反证测试 | HIGH | 经用户同意补测试，否则删声明 |
+| 契约声明无反证测试 | HIGH | 在授权范围内补测试；否则标为未证实并列出风险 |
 | `govulncheck` 报告可达漏洞 | HIGH | 升级依赖，否则写明原因 |
 | N+1、热路径分配 | HIGH | 优化或写明量化理由 |
 | 外部输入未判 nil / 未校验范围 | HIGH | 完成前修复 |
