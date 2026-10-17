@@ -1,6 +1,6 @@
 ---
 name: planning-with-files
-description: File-based planning: task_plan.md, findings.md and progress.md as working memory on disk. Use when asked to plan or break down a multi-step task needing more than 5 tool calls.
+description: "Use for multi-step planning needing more than 5 tool calls; keep task_plan.md, findings.md, and progress.md on disk."
 user-invocable: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch"
 hooks:

@@ -107,7 +107,7 @@ internal/repository     DB/Redis/MQ 访问；不依赖 handler/service，不 imp
 internal/platform       日志、配置、可观测性初始化
 ```
 
-- 依赖方向用 depguard 固化（上面配置的 `layering` 规则）：违反即 lint 失败，比口头约定可靠。`go-arch-lint` 能检查更复杂的分层并画依赖图，但多一个工具；只有三层时 depguard 足够。
+- 依赖方向用 depguard 固化（上面配置的 `layering` 规则）：违反即 lint 失败，比口头约定可靠。需要更复杂的分层检查或依赖图时，再按项目选用已批准的架构分析工具；只有三层时 depguard 足够。
 - 接口定义在使用方：service 定义 `OrderRepo` 接口，repository 实现，service 测试不需要 DB。
 - `pkg/` 只在有外部模块消费时存在；单体服务全放 `internal/`。
 

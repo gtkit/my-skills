@@ -14,6 +14,14 @@
 | `tech-design-review` | 技术方案文档模板（含非目标、候选方案对比、失败模式、上线与回滚）、ADR 模板、容量估算公式、评审清单与否决项；语言无关 |
 | `senior-php-engineer` / `senior-python-engineer` / `senior-nodejs-engineer` / `senior-frontend-engineer` / `senior-rust-engineer` / `senior-lua-engineer` / `senior-openresty-engineer` / `senior-devops-engineer` | 各语言/领域的运行时行为、版本特性归属、生产事故高发点与选型判断；开头统一的"工作方式"段，其余全部是可证伪事实 |
 
+### 开发与交付门禁层
+
+| skill | 内容 |
+|---|---|
+| `vue-frontend-engineer` | Vue 3 + JavaScript/TypeScript 的生产开发工作流：组件、路由、状态、API 适配、异步竞态、令牌刷新、表单、测试、安全、性能与可访问性；不替代前端验收 |
+| `frontend-acceptance` | 前端项目证据化验收：需求追踪、浏览器行为、API 契约、权限/租户、数据一致性、安全、性能、可访问性和准入报告；构建/截图不等于通过 |
+| `backend-acceptance` | Go/PHP/Node.js 等后端的生产风险审计：业务规则来源、调用链、不变量、事务、幂等、并发、权限、安全、索引、容量、失败补偿与证据门禁 |
+
 ### 规范层（写任何代码前生效）
 
 | skill | 内容 |
@@ -68,12 +76,22 @@
 ## 组合方式
 
 - 任何 Go 代码：`use-modern-go` 常驻；交付前验证走 `go-enterprise-quality`（验证深度按改动类型分级，文案改动只跑 build/vet）；审查走 `go-review`；架构与选型问题走 `senior-go-engineer`，方案文档走 `tech-design-review`；具体领域再叠加对应的 go-* 专项。
+- 前端开发走 `vue-frontend-engineer`（Vue 3 项目）或 `senior-frontend-engineer`（跨框架判断）；交付验收再走 `frontend-acceptance`。前端发现授权、事务、幂等或数据一致性问题时，升级到 `backend-acceptance`。
+- 后端交付验收优先走 `backend-acceptance`，再按语言和风险路由到 `go-review`、`go-enterprise-quality`、`go-testing`、`go-data-consistency`、`go-security`、`go-database-patterns`、`go-stability-engineering`、`go-microservice` 或对应的 `senior-*` skill。
 - 主题归属只有一处实现，其他 skill 引用而不重复：日志/metrics/tracing 在 `go-observability`；限流/熔断/重试/超时预算在 `go-stability-engineering`；缓存一致性在 `go-cache-consistency`；事务与分布式事务在 `go-data-consistency`；错误类型与错误码在 `go-error-handling`。
+
+## 重复与近似职责审查
+
+- `senior-frontend-engineer` 与 `vue-frontend-engineer` 不合并：前者是跨框架判断与参考，后者是 Vue 3/JS/TS 实现工作流。
+- `go-review`、`go-enterprise-quality` 与 `backend-acceptance` 不合并：前两者是 Go 专项审查/门禁，后者跨 Go/PHP/Node.js 编排业务和生产证据。
+- `go-microservice` 已覆盖 Go 微服务实现细节，保留为专项；`backend-acceptance` 只负责识别微服务验收风险并路由过去。
+- `planning-with-files` 与 `planning-with-files-web` 的行为相似但运行环境不同，保留两份并在描述中区分使用环境。
+- `openresty-patterns` 与 `senior-openresty-engineer` 分别承担可运行模式参考和架构判断，保留边界，不重复新增。
 
 ## 文件布局与描述规范
 
-- `description` 只写"做什么 + 什么时候用"，每条 150 字以内。Claude Code 对全部 skill 描述有总字数预算，超出后靠后的 skill 描述会被截空、不再触发；触发词长尾与分工说明放正文。
-- 内容多的 skill 拆成"路由 + references/"：`SKILL.md` 只放核心规则、判断表、审查清单与"按任务读取"路由表，代码模板与逐版本速查放 `references/*.md`，按路由表只读本次任务需要的文件。判定标准：`SKILL.md` 超过 250 行，或含 3 段以上代码模板就拆。目前 22 个已拆，其余正文都在 300 行以内。
+- `description` 只写"做什么 + 什么时候用"，本仓库约定每条不超过 150 个字符；这是可维护性门槛，不把它当成未经核实的平台硬限制。触发词长尾与分工说明放正文。
+- 内容多的 skill 拆成"路由 + references/"：`SKILL.md` 只放核心规则、判断表、审查清单与"按任务读取"路由表，代码模板与逐版本速查放 `references/*.md`，按路由表只读本次任务需要的文件。超过 250 行时优先评估拆分收益；只有实际按需加载能减少无关上下文才拆，不机械按行数拆分。
 - 同一条规则只在一处写全：审查四条（枚举输入域、回审调用方、契约反证、整段重读）完整版在 `go-review` 与 `go-enterprise-quality`，其他 skill 一句话引用。
 
 ## 全仓公共约定
@@ -91,6 +109,14 @@
 | `pack.sh [name...]` | 打包为 `_dist/<name>.skill`（zip），排除 `.DS_Store` |
 | `sync.sh [name...]` | 把 skill 目录同步到 `~/.claude/skills` 与 `~/.codex/skills`（`TARGETS` 可覆盖）；目标目录里仓库没有的 skill 保持不动 |
 | `sync.ps1 [name...]` | 同上，Windows 原生 PowerShell 版，用 robocopy /MIR 镜像到 `%USERPROFILE%\.claude\skills` 与 `%USERPROFILE%\.codex\skills`（`$env:TARGETS` 可覆盖，分号分隔） |
+| `scripts/validate.ps1` | 校验 frontmatter、目录名、相对引用、描述长度、文件长度和 `catalog.yaml` 覆盖范围 |
+
+## 维护入口
+
+- `AGENTS.md` 只记录修改分级、必读文件、校验命令和发布边界，不承载领域知识或动态状态。
+- `catalog.yaml` 记录 skill 的状态、适用平台、references 和 Codex UI 元数据；以各目录的 `SKILL.md` 为内容源。
+- `evals/routing.md` 记录应触发、不应触发和边界场景；场景推演不等同于真实模型评测。
+- 改动 skill 前先运行 `pwsh -File scripts/validate.ps1`；修改触发语义、授权边界或跨 skill 路由时，再按 `evals/routing.md` 做代表场景验证。
 
 ## 维护规则
 

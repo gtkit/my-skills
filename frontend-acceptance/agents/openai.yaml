@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Acceptance"
+  short_description: "Evidence-based frontend release gating"
+  default_prompt: "Use $frontend-acceptance to audit this frontend and produce an evidence-based release decision with blockers and unverified areas."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vue Frontend Engineer"
+  short_description: "Build production Vue 3 and TypeScript apps"
+  default_prompt: "Use $vue-frontend-engineer to build or change this Vue 3 feature with production-safe async, types, tests, security, and performance."

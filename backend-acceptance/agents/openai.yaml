@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend Acceptance"
+  short_description: "Audit backend logic and production risk"
+  default_prompt: "Use $backend-acceptance to audit this backend across requirements, invariants, concurrency, transactions, idempotency, authorization, security, indexes, and performance."

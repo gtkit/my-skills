@@ -1,6 +1,6 @@
 ---
 name: planning-with-files-web
-description: File-based planning for the Claude.ai web environment: task_plan.md, findings.md and progress.md as persistent memory. Use when asked to plan, organize or track a multi-step task in Claude.ai.
+description: "Use for multi-step planning in Claude.ai Web; keep task_plan.md, findings.md, and progress.md as persistent memory."
 ---
 
 # Planning with Files (Web Edition)
