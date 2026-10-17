@@ -1,0 +1,94 @@
+---
+name: runtime-upgrade-migration
+description: Use when upgrading Go, PHP/Laravel, Vue/Node, or OpenResty versions/dependencies and needing compatibility, staged migration, rollback evidence.
+---
+
+# 运行时与依赖升级迁移
+
+## 适用场景
+
+用于 Go、PHP/Laravel、Vue/Node、OpenResty 或其依赖的版本升级、运行时切换、锁文件刷新和伴随的数据迁移。流程适用于单服务，也适用于多个组件需要按顺序交付的跨栈升级。目标版本、支持周期、业务兼容规则和回滚能力必须来自项目资料或已核实的供应商资料；本 skill 不替项目猜版本事实。
+
+不把一次 `go get`、`composer update`、`npm update` 或配置改动当成完成的迁移。升级要能回答：影响哪些入口和消费者、怎样发现不兼容、怎样停在中间状态、怎样回到可工作的版本。
+
+## 输入与前置事实
+
+开始前收集并保存：
+
+- 当前和目标版本，包含运行时、框架、关键扩展、构建镜像、OS/CPU 架构；未知项标记“未确认”。
+- `go.mod`/`go.sum`、`composer.json`/`composer.lock`、`package.json` 与对应 lockfile、OpenResty/Nginx 配置和镜像 digest。
+- 直接与间接依赖、插件、生成代码、原生扩展、私有包和许可证约束。
+- API、事件、任务、数据库 schema、缓存键和配置的兼容要求；消费者清单和保留时长。
+- 目标 SLO、当前基线、流量分层、发布窗口、迁移数据量、备份恢复结果、回滚负责人和可用开关。
+- 已批准的需求、供应商 release notes、测试环境和可运行命令。只有文档推断而未运行的结论写为“待验证”。
+
+## 按顺序执行
+
+### 1. 建立基线和范围
+
+1. 锁定 commit、环境、配置来源、依赖获取方式和数据库快照时间。
+2. 记录升级前构建、启动、健康检查、关键 API/任务、错误率、延迟、资源和队列状态。
+3. 列出非目标，例如不同时改业务规则或数据库引擎；若需求没有定义，不新增迁移行为。
+4. 为每个组件定义停止条件：构建失败、契约失败、SLO 超出、数据校验差异或回滚演练失败时暂停。
+
+### 2. 制作兼容矩阵
+
+为每个组件维护一行：
+
+| 组件 | 当前→目标 | 直接依赖/扩展 | API/配置/数据影响 | 验证命令或测试 | 回滚版本与条件 | 状态 |
+|---|---|---|---|---|---|---|
+
+逐行确认语言、框架、插件、构建器和基础镜像的支持关系。没有来源的“兼容”只能写成假设；没有可执行验证的行保持“未验证”。把跨组件顺序写成图或清单，例如先扩展 schema，再部署可读旧新格式的代码，最后收缩旧字段。
+
+### 3. 固定依赖和改动批次
+
+1. 复制现有 lockfile 和构建产物元数据；每批只改变一个可归因的版本组。
+2. Go 运行 `go mod tidy -diff`、`go mod verify`，并在 `GOWORK=off` 下按仓库声明构建；将语言写法和版本特性路由 `use-modern-go`，Go 包治理和 API 兼容路由 `go-engineering-governance`。
+3. PHP/Laravel 保留 `composer.lock`，运行项目约定的 `composer validate`、`composer check-platform-reqs` 和测试；语法/特性路由 `use-modern-php`，FPM/OPcache/Octane 与 Laravel 运行时路由 `senior-php-engineer`。
+4. Node/Vue 保留项目约定的 lockfile 和包管理器版本，执行 clean install、类型检查、构建和浏览器测试；跨框架运行时判断路由 `senior-frontend-engineer`，Vue 实现细节路由 `vue-frontend-engineer`。
+5. OpenResty 先执行配置语法检查和离线回归，再在受控实例 reload；Lua API 细节路由 `openresty-patterns`，网关操作路由 `openresty-gateway-operations`。
+
+### 4. 设计可停的迁移
+
+- 数据库采用需求允许时的 expand/contract：先增加可兼容结构和回填工具，再切换读写，验证后才删除旧结构。迁移必须幂等、可分批、可观测；不可逆步骤需要经过恢复演练或明确人工恢复方案。
+- API、缓存键、事件和任务采用兼容窗口：先让新代码读取旧格式，再写新格式；保留旧消费者所需字段直到清单中的消费者完成升级。
+- 需要双读、双写、shadow 或 feature flag 时，记录一致性判定、停止条件和关闭路径。没有需求支持时，不自行添加业务默认值、状态迁移或数据修复规则。
+
+### 5. 预发布和分阶段上线
+
+1. 在尽可能接近生产的数据规模和配置下运行单元、集成、契约、迁移、恢复和安全检查。
+2. 先发布能兼容旧数据/旧消费者的代码，再按流量或实例分批升级；每批前后保存版本、配置、迁移进度和指标快照。
+3. 观察错误率、延迟、资源、重启、连接池、队列积压、数据校验差异和业务不变量。指标缺失时停止扩大范围并记录未验证。
+4. 只有达到项目定义的观察窗口和门槛才进入下一批；门槛没有来源时写“需负责人确认”，不能自行填数。
+
+### 6. 收口
+
+确认目标版本和 lockfile 已在构建产物中生效，旧兼容路径的删除有单独变更和证据；更新运行手册、依赖清单、告警、回滚步骤和后续清理日期。对未执行的恢复、长尾消费者或低流量路径保持未验证状态。
+
+## 失败、暂停与回滚
+
+- 构建、契约或迁移前检查失败：保留日志和输入，恢复上一批 lockfile/镜像，不推进流量。
+- canary 或分批指标越过已批准门槛：停止扩容，切回上一版本或关闭开关，确认旧代码仍能读写迁移中的数据，再决定是否回填或重试。
+- 数据库结构已产生不可逆变化：不要假设“回滚应用”足够；按已演练的向前修复、备份恢复或人工补偿方案执行，若无方案则标记阻断。
+- 依赖供应链或构建源异常：固定已验证的 lockfile、digest 和缓存，不用未审查的临时最新版替代。
+- 每次回滚记录触发时间、版本/配置、影响范围、数据状态、恢复命令、验证结果和遗留风险。真实回滚未执行时写“仅静态推演”。
+
+## 证据记录
+
+迁移记录至少包含：范围与 commit、当前/目标矩阵、依赖差异、lockfile 校验、命令及退出码、测试报告、迁移批次与行数、备份/恢复证据、每批指标、决策人、未验证项及补测条件。命令输出可截取关键行，但要保留可重跑命令和时间戳；供应商资料记录 URL、版本和读取日期。
+
+## 完成条件
+
+- 兼容矩阵中的关键行已验证或有明确阻断项。
+- 构建、启动、契约、迁移、恢复和分阶段观察均有证据，lockfile/镜像可复现。
+- 旧消费者、旧数据和回滚路径在需求范围内有明确处理；未知项没有被写成通过。
+- 运行手册和告警已更新，目标负责人知道继续、暂停和回滚条件。
+
+## 不触发与路由
+
+- 只问某个语言版本特性或现代写法：路由 `use-modern-go` 或 `use-modern-php`；不在此重复版本速查。
+- 只做 PHP/FPM/Octane/Laravel 运行时判断：路由 `senior-php-engineer`；只做浏览器或 Vue 实现：路由 `senior-frontend-engineer` 或 `vue-frontend-engineer`。
+- 只做 Go lint、`go.mod` 治理、`apidiff` 或发布纪律：路由 `go-engineering-governance`。
+- 跨栈发布顺序、流量切换和统一回滚编排：叠加 `polyglot-release-engineering`；Kubernetes、镜像和基础设施决策：叠加 `senior-devops-engineer`。
+- 只做 OpenResty Lua 模式或网关操作：路由 `openresty-patterns` 或 `openresty-gateway-operations`。
+- 业务验收需要准入结论时叠加 `backend-acceptance` 或 `frontend-acceptance`；本 skill 只提供升级迁移证据，不替代验收结论。

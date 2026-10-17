@@ -1,0 +1,54 @@
+---
+name: cross-stack-observability
+description: Use when aligning request tracing, logs, metrics, sampling, and alerts across OpenResty, PHP, Go, and browsers.
+---
+
+# 跨栈可观测性
+
+用于把一次浏览器请求在 OpenResty、PHP、Go 及下游依赖中的关联字段和证据串起来。目标是能从告警定位到请求，再从请求定位到日志、trace 和指标；具体库的实现规则仍由对应专项 skill 负责。
+
+## 适用场景
+
+- 新增或修正跨网关、PHP、Go、浏览器的 `request_id`、`traceparent`、`trace_id`、`span_id` 传递。
+- 统一结构化日志字段、脱敏规则、采样和慢请求留痕。
+- 验证 RED 指标、trace 关联和 SLO 告警是否能在真实请求中闭环。
+- 排查“日志有但 trace 断了”“指标有但无法定位请求”“告警没有可复现证据”。
+
+## 输入与前置事实
+
+开始前收集并记录：入口域名和代理拓扑、服务及语言版本、出站调用清单、现有 header/日志/指标 schema、PII 与保留策略、SLO/告警来源、采样配置、可用的测试账号和环境。缺少来源时写“未确认”，不要自行规定业务字段、阈值或保留期限。
+
+## 按顺序执行
+
+1. **画链路与责任表**：列出浏览器→OpenResty→PHP/Go→数据库或消息系统的每一跳，标明谁生成、读取、转发、记录和删除关联字段；为每跳指定验证命令或请求样本。
+2. **确定关联协议**：确认入口如何生成或接受 `request_id`，跨服务如何传递 W3C `traceparent`/`tracestate`。外部传入的值先校验长度和字符集；冲突时保留受信任的内部上下文，并在证据中记录处理规则。
+3. **定义日志契约**：固定 `service`、`env`、`route`、`status`、`duration_ms`、`request_id`、`trace_id`、`span_id` 等字段的类型和来源。密码、token、`Authorization`、身份证件、手机号、请求体和原始 URL 按脱敏策略处理；不把用户标识或错误文本做高基数 label。
+4. **核对指标与采样**：按有限枚举的 `service`、`route`、`method`、`status_class` 聚合请求数、错误率和延迟。为 5xx、取消、慢请求定义留痕和采样例外；采样比例必须有配置或容量依据，未知就标记未验证。
+5. **验证慢请求和告警**：用已知路由构造成功、5xx、超时和慢请求，检查日志、trace、指标是否都保留可关联字段。用告警规则的实际查询或录制结果验证触发、恢复和去重；不能访问 Collector、Prometheus 或告警系统时记录“未验证”。
+6. **做跨组件回放**：保存一条含浏览器请求头、网关日志、后端日志、trace、指标时间窗的脱敏样本，核对同一 `trace_id`/`request_id` 的时间顺序、状态码和耗时是否一致。浏览器侧仅记录允许的诊断字段。
+7. **复核数据暴露与成本**：抽样检查日志和 trace event 的 PII，统计高基数 label、日志量和采样后的保留量。发现超标先停用有风险的字段或采样规则，再提交修复；不要用删除证据掩盖问题。
+
+## 失败、回滚与降级
+
+- 关联字段缺失：保留当前请求的内部 `request_id`，把 trace 关联标为未验证，并阻断“链路完整”结论。
+- 传播格式冲突或不可信：在受信任边界重新生成字段，保留原值哈希或存在性信息（若策略允许），回滚到上一份 header mapping。
+- 发现 PII：立即撤下字段或采样，按日志保留策略处理已写数据；记录处置范围和未能清除的存储。
+- 告警规则误报或无证据：回滚规则版本或降级通知级别，保留旧规则的查询和恢复条件；SLO、阈值和告警分级的判断路由 `senior-devops-engineer`。
+
+## 证据记录
+
+每次变更记录：范围、commit、环境、组件版本、字段契约版本、配置差异、脱敏审查、样本请求 ID、日志/trace/metrics 查询、命令及退出码、告警触发与恢复时间、容量或采样测量、失败和回滚步骤。每项标记“通过 / 失败 / 未验证 / 不适用”；工具不可用、后端未部署、测试数据缺失都写明原因。
+
+## 完成条件
+
+- 每一跳都有生成/传播/记录责任和可复现样本。
+- 成功、5xx、超时、取消和慢请求的证据状态已记录，未验证项有补测条件。
+- 日志脱敏、高基数指标、采样与告警查询经过实际或静态证据审查。
+- 已说明回滚版本、触发条件和恢复检查；没有把静态推演写成真实运行结果。
+
+## 不触发与路由
+
+- 只写 Go 的 OTel、`gtkit/logger`、Prometheus registry、middleware 或慢 SQL 实现时，转 `go-observability`；本 skill 只提供跨栈契约和验证编排。
+- 只做 OpenResty Lua API、执行阶段或 timer/cosocket 代码时，转 `openresty-patterns`；网关运行操作转 `openresty-gateway-operations`。
+- 只做基础设施、SLO 预算或告警平台运维判断时，转 `senior-devops-engineer`。
+- 业务验收中的权限、事务、幂等或性能准入转 `backend-acceptance`/`frontend-acceptance`；本 skill 不替代验收结论。

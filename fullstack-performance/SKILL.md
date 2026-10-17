@@ -1,0 +1,85 @@
+---
+name: fullstack-performance
+description: Use when tracing or capacity planning browser→OpenResty→PHP/Go→Redis/DB/MQ latency, throughput, errors, or resource regressions.
+---
+
+# 全栈性能预算与回归
+
+## 适用场景
+
+用于浏览器请求经过 OpenResty、PHP-FPM/Laravel 或 Go，再访问 Redis、数据库、MQ 的端到端性能预算、基线建立、定位、压测、容量评估和回归。重点是把一次用户请求拆成可观测的阶段，并用同一工作负载比较变更前后结果。
+
+性能目标必须来自产品 SLO、接口契约、容量计划或负责人确认。没有目标 QPS、并发模型、数据规模、缓存命中语义或错误预算时，先记录缺口，不能凭经验宣布“够快”。各层 percentile 不能简单相加代表端到端 percentile；使用 trace 和同一请求样本关联判断。
+
+## 输入与前置事实
+
+开始前收集：
+
+- 端到端 SLO（如 p95/p99、可接受错误率、吞吐）和流量模型：并发、到达率、读写比例、payload、连接复用、峰值和持续时间。
+- 浏览器/设备/网络条件、缓存冷热状态、数据库数据量与索引、Redis/MQ 拓扑、PHP-FPM/Go 实例资源和配置。
+- 版本、commit、feature flag、部署拓扑、采样率、request ID/trace ID 关联方式。
+- 基线时间窗口、代表请求、成功定义、资源上限和压测数据脱敏规则。环境或数据不等价时标为“不可直接比较”。
+
+## 按顺序执行
+
+### 1. 建立预算和测量计划
+
+1. 将端到端目标拆成浏览器、网络、OpenResty、应用、缓存、数据库、MQ 和排队等待的预算区间；记录预算来源和剩余余量。
+2. 明确每个阶段的计时点、标签、采样率和脱敏规则。至少能按 request ID 连接入口日志、trace、下游调用和错误。
+3. 规定实验变量、固定项、预热方式、采样窗口、停止条件和恢复步骤；一次实验只改变可归因的主要变量。
+
+### 2. 采集可复现基线
+
+1. 固定 commit、配置、镜像、数据快照、客户端脚本和压测工具版本。
+2. 分别测冷缓存、热缓存、连接复用和必要的失败/超时路径；记录 p50/p95/p99、吞吐、错误、排队、CPU、内存、网络、连接池和磁盘/IO。
+3. 保存原始结果、时间戳和环境差异。只有单次手工请求或只看平均值时，结论写“基线不足”。
+
+### 3. 按链路定位
+
+- 浏览器：用 DevTools、Lighthouse 或 Web Vitals 区分 DNS/连接、TTFB、下载、主线程、渲染和资源体积；框架渲染与水合判断路由 `senior-frontend-engineer`。
+- OpenResty：关联 `$request_time`、上游耗时、状态码、连接和缓存命中；Lua API 细节路由 `openresty-patterns`，限流、超时和网关操作叠加 `openresty-gateway-operations`。
+- PHP/Laravel：对照 PHP-FPM 队列、慢日志、OPcache、数据库和外部调用；运行时判断路由 `senior-php-engineer`。
+- Go：用 profile、trace、benchmark 和 `benchstat` 证明 CPU、阻塞、分配或 GC 假设；具体 pprof/GC/PGO 细节路由 `go-performance`。
+- Redis/数据库/MQ：记录命令延迟、命中率、连接池、慢查询/`EXPLAIN`、锁等待、IO、消费 lag 和批量大小；不要把下游平均值当成单请求证据。
+
+### 4. 形成假设并验证
+
+1. 从 trace、profile、慢查询或资源曲线选出占预算最大的可证实原因，写明反例和预期变化。
+2. 先做低风险配置或代码实验，再做压测；每次实验保存输入、版本、结果和是否达到预期。
+3. 若怀疑队列、重试、连接池或缓存放大，分别测正常、饱和和故障情形，并计算新增负载；稳定性策略具体实现路由 `go-stability-engineering`。
+
+### 5. 压测与容量评估
+
+1. 设计 closed/open workload、ramp、steady、spike 和恢复阶段；说明是否包含缓存预热、后台任务、批处理和真实数据分布。
+2. 逐步提高到目标负载以上，寻找 SLO、错误率、资源或队列开始恶化的拐点；记录每个阶段的实例数、限额和拓扑。
+3. 用实测拐点估算容量与扩容步长，明确线性假设、共享依赖和余量来源。未覆盖的峰值、跨地域网络或故障场景写“未验证”。
+
+### 6. 回归和收口
+
+重跑同一基线脚本，比较分位数、吞吐、错误、资源和成本；检查是否把延迟转移到下游或后台队列。只有达到已批准 SLO、容量和回滚条件，才把优化标记为完成。
+
+## 失败、暂停与回滚
+
+- 压测造成错误率、队列积压、资源耗尽或影响共享环境：立即停止发生器，恢复配置/feature flag，清理测试数据并验证服务健康。
+- 观测配置本身引入延迟或高基数：降低采样、撤销变更，保留已经采集的证据；跨语言字段和关联方式路由 `cross-stack-observability`。
+- 优化后端到端变慢或错误增加：回到上一版本/配置，重新跑代表负载；没有可重复基线时只能报告“结果不确定”。
+- 扩容掩盖瓶颈、缓存预热掩盖冷启动或压测数据过小：暂停容量结论，补齐数据与场景。
+
+## 证据记录
+
+报告保存：SLO 与预算来源、工作负载定义、环境/commit/配置、工具与命令、原始及汇总结果、trace/profile/慢查询链接、资源和依赖拓扑、实验假设、容量拐点、回滚记录、成本影响、未验证项和补测条件。每项“改善”同时给出前后窗口、样本量和比较方法。
+
+## 完成条件
+
+- 基线和目标工作负载可复现，关键链路有 request ID/trace 证据。
+- 性能瓶颈由测量支持，优化前后在同一模型下比较；容量结论标明假设和覆盖范围。
+- SLO、错误、资源、成本和回滚影响均有记录；缺失的环境或场景明确标为未验证。
+
+## 不触发与路由
+
+- 只做 Go pprof、GC、PGO、逃逸或 benchmark 细节：路由 `go-performance`。
+- 只做 PHP-FPM、OPcache、Octane、Laravel runtime：路由 `senior-php-engineer`。
+- 只做浏览器组件、Core Web Vitals、Vue/React 渲染或包体：路由 `senior-frontend-engineer` 或 `vue-frontend-engineer`。
+- 只做 OpenResty 配置变更、流量切换、缓存/限流/证书 reload：路由 `openresty-gateway-operations`；Lua API 模式路由 `openresty-patterns`。
+- 只做 Go 超时、重试、熔断、限流、背压或 SLO 预案：路由 `go-stability-engineering`；基础设施容量和 Kubernetes 决策叠加 `senior-devops-engineer`。
+- 业务准入、索引正确性、权限和不变量审计：叠加 `backend-acceptance`；跨语言追踪字段：叠加 `cross-stack-observability`。

@@ -12,6 +12,20 @@
 | 设计 Go 服务的单体/微服务边界和容量 | `senior-go-engineer` | `go-microservice` | 架构取舍优先；只有具体服务通信实现才路由专项 |
 | 为复杂任务建立 task_plan.md、findings.md、progress.md | `planning-with-files` | `planning-with-files-web` | 本地项目环境；Claude.ai Web 才使用 web 版 |
 | 用下载技能下载视频，顺便提到“skill” | 无本仓库 skill | `skill-optimizer` | 不因出现“skill”一词就启动 skill 审查 |
+| PHP 和 Go 共用 API，前端字段、错误码和分页规则要兼容 | `cross-stack-api-contract` | `vue-frontend-engineer`、`go-gin-api` | 契约与兼容性优先；具体实现再叠加语言 skill |
+| Go、PHP-FPM、前端静态资产和 OpenResty 要一起灰度并可回滚 | `polyglot-release-engineering` | `senior-devops-engineer` | 跨栈发布顺序和回滚优先；基础设施细节再路由 DevOps |
+| Laravel 改动需要 PHPUnit/Pest、PHPStan、Composer 和迁移门禁 | `php-enterprise-quality` | `senior-php-engineer` | PHP 交付质量优先；运行时判断才触发 senior-php |
+| 线上出现 502/504、401 或队列积压，需要定位和止损 | `incident-response` | `go-review`、`frontend-acceptance` | 先建立事故范围和证据链，不把静态审查当作事故处置 |
+| 要统一 OpenResty、PHP、Go 和浏览器的 request ID/trace 字段 | `cross-stack-observability` | `go-observability` | 跨栈关联优先；Go 的 OTel 实现叠加 go-observability |
+| 修改 OpenResty upstream、缓存、限流或证书并需要安全 reload | `openresty-gateway-operations` | `openresty-patterns` | 运行操作优先；Lua API 或架构判断再路由现有 OpenResty skill |
+| CI 需要同时做 Go/PHP/npm 依赖、secret、SBOM 和镜像安全检查 | `polyglot-security-supply-chain` | `go-security` | 供应链编排优先；Go Web 输入安全叠加 go-security |
+| 一个跨栈功能需要决定单测、契约、集成、浏览器和故障注入范围 | `polyglot-test-engineering` | `frontend-acceptance`、`backend-acceptance` | 测试策略优先；发布准入仍走对应验收 skill |
+| 升级 PHP/Laravel、Go、Vue/Node 或 OpenResty 并要求分阶段回滚 | `runtime-upgrade-migration` | `use-modern-go`、`use-modern-php` | 升级流程优先；具体版本语义再路由语言 skill |
+| p95 从浏览器到网关、FPM/Go 和数据库都变慢，需要压测定位 | `fullstack-performance` | `go-performance` | 跨层测量优先；Go pprof 细节叠加 go-performance |
+| Laravel job 和 Go consumer 共用事件，需要重试、DLQ、幂等和回放 | `async-job-contracts` | `go-mq-patterns`、`go-data-consistency` | 事件契约优先；具体 MQ 或事务实现再路由专项 |
+| 只想修改一个 Vue 组件的样式或状态，不涉及接口、发布或测试策略 | `vue-frontend-engineer` | `cross-stack-api-contract`、`polyglot-test-engineering` | 不因“前端”泛词触发跨栈 SOP |
+| 只审查一段 Lua 的 `ngx.shared.DICT` 用法 | `openresty-patterns` | `openresty-gateway-operations` | 代码模式优先，不进入网关发布操作 |
+| 只运行一次 `composer audit` 或 `npm audit` 查看输出 | 无新增跨栈 skill | `polyglot-security-supply-chain` | 单次机械命令不等于供应链治理流程 |
 
 ## 记录格式
 

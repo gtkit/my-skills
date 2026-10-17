@@ -60,6 +60,22 @@
 | `openresty-patterns` | ngx_lua 各阶段 API 可用性、shared dict 真实行为、三级缓存与击穿防护、cosocket 连接池、`ngx.re`、cjson、timer、阻塞排查——全部本机实测 |
 | `shell-scripting` | Bash 脚本骨架、`set -e` 失效点、引用与数组、trap 与信号、getopts、锁与超时、macOS/BSD 与 GNU 差异、bash 3.2 兼容 |
 
+### 跨栈交付与生产 SOP
+
+| skill | 内容 |
+|---|---|
+| `cross-stack-api-contract` | Go/PHP 后端与前端之间的 OpenAPI/JSON Schema、错误 envelope、分页、鉴权、兼容性、生成和契约测试；不替代具体 handler 实现或最终验收。 |
+| `polyglot-release-engineering` | Go、PHP-FPM/Octane、前端资产和 OpenResty 的统一发布、数据库 expand/contract、灰度、缓存、健康检查和回滚。 |
+| `php-enterprise-quality` | PHP/Laravel 的 PHPUnit/Pest、PHPStan/Psalm、Pint、Composer、迁移、队列和 CI 质量门禁。 |
+| `incident-response` | 浏览器、网关、PHP-FPM、Go、Redis、数据库的事故分级、止损、证据链、回滚、降级和复盘。 |
+| `cross-stack-observability` | OpenResty、PHP、Go、浏览器间的 request ID、trace context、日志字段、脱敏、指标、采样和告警验证。 |
+| `openresty-gateway-operations` | OpenResty/Nginx 配置检查、upstream、超时、缓存、限流、长连接、证书、reload、流量切换和回滚。 |
+| `polyglot-security-supply-chain` | Go/PHP/npm 依赖、CVE、SBOM、secret、SAST/DAST、镜像和许可证治理。 |
+| `polyglot-test-engineering` | 跨栈测试层次、契约/集成/E2E/故障注入、测试数据、flaky 管理和证据要求。 |
+| `runtime-upgrade-migration` | Go、PHP/Laravel、Vue/Node、OpenResty 的版本升级、兼容矩阵、分阶段迁移和回滚。 |
+| `fullstack-performance` | 浏览器到网关、PHP/Go、Redis、数据库和 MQ 的性能预算、基线、压测、定位和容量评估。 |
+| `async-job-contracts` | Laravel Queue、Go MQ 和跨语言事件的 schema 版本、投递语义、幂等、重试、DLQ、顺序和回放。 |
+
 ### 流程工具
 
 | skill | 内容 |
@@ -78,6 +94,9 @@
 - 任何 Go 代码：`use-modern-go` 常驻；交付前验证走 `go-enterprise-quality`（验证深度按改动类型分级，文案改动只跑 build/vet）；审查走 `go-review`；架构与选型问题走 `senior-go-engineer`，方案文档走 `tech-design-review`；具体领域再叠加对应的 go-* 专项。
 - 前端开发走 `vue-frontend-engineer`（Vue 3 项目）或 `senior-frontend-engineer`（跨框架判断）；交付验收再走 `frontend-acceptance`。前端发现授权、事务、幂等或数据一致性问题时，升级到 `backend-acceptance`。
 - 后端交付验收优先走 `backend-acceptance`，再按语言和风险路由到 `go-review`、`go-enterprise-quality`、`go-testing`、`go-data-consistency`、`go-security`、`go-database-patterns`、`go-stability-engineering`、`go-microservice` 或对应的 `senior-*` skill。
+- Go/PHP/前端/OpenResty 的接口联调先走 `cross-stack-api-contract`；发布顺序、迁移、灰度或回滚走 `polyglot-release-engineering`；PHP 代码交付门禁走 `php-enterprise-quality`。
+- 生产故障先走 `incident-response`；跨语言链路字段和告警走 `cross-stack-observability`；OpenResty 配置与流量操作走 `openresty-gateway-operations`。
+- 跨语言依赖、密钥和镜像治理走 `polyglot-security-supply-chain`；测试层次和故障注入设计走 `polyglot-test-engineering`；版本升级走 `runtime-upgrade-migration`；跨层性能排查走 `fullstack-performance`；事件/任务契约走 `async-job-contracts`。
 - 主题归属只有一处实现，其他 skill 引用而不重复：日志/metrics/tracing 在 `go-observability`；限流/熔断/重试/超时预算在 `go-stability-engineering`；缓存一致性在 `go-cache-consistency`；事务与分布式事务在 `go-data-consistency`；错误类型与错误码在 `go-error-handling`。
 
 ## 重复与近似职责审查
@@ -87,6 +106,10 @@
 - `go-microservice` 已覆盖 Go 微服务实现细节，保留为专项；`backend-acceptance` 只负责识别微服务验收风险并路由过去。
 - `planning-with-files` 与 `planning-with-files-web` 的行为相似但运行环境不同，保留两份并在描述中区分使用环境。
 - `openresty-patterns` 与 `senior-openresty-engineer` 分别承担可运行模式参考和架构判断，保留边界，不重复新增。
+- `cross-stack-api-contract` 负责契约和兼容性，`frontend-acceptance`/`backend-acceptance` 负责发布准入；`polyglot-test-engineering` 负责测试策略，不替代两者的验收结论。
+- `polyglot-release-engineering` 负责跨栈发布编排，`senior-devops-engineer` 负责基础设施判断，`go-engineering-governance` 负责 Go 包和版本发布纪律。
+- `cross-stack-observability` 负责跨语言关联和证据，`go-observability` 负责 Go 的具体实现；`openresty-gateway-operations` 负责运行操作，OpenResty 两个现有 skill 负责 Lua/API 和架构。
+- `php-enterprise-quality` 负责 PHP 交付门禁，`senior-php-engineer` 负责运行时和 Laravel 判断；`polyglot-security-supply-chain` 负责供应链，语言安全实现仍路由到对应安全 skill。
 
 ## 文件布局与描述规范
 

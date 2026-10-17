@@ -1,0 +1,54 @@
+---
+name: polyglot-security-supply-chain
+description: Use when governing Go, PHP, npm, frontend, image, secret, SBOM, CVE, and license risks across a software supply chain.
+---
+
+# 跨语言安全与供应链
+
+用于 Go、PHP、Node/npm、前端构建和容器镜像的依赖、密钥、漏洞、SBOM、SAST/DAST 与许可证治理。它负责跨项目流程和证据，不替代语言专项安全实现或前端验收。
+
+## 适用场景
+
+- 审查 `go.mod/go.sum`、`composer.json/composer.lock`、`package.json` 及 npm lockfile 的来源、完整性和升级风险。
+- 建立或核对 CVE、SBOM、secret、SAST/DAST、镜像扫描和许可证门禁。
+- 处理高危依赖、泄露密钥、基础镜像更新、锁文件漂移和升级回滚。
+
+## 输入与前置事实
+
+收集目标 commit、各语言版本、依赖清单和 lockfile、私有 registry/镜像仓库来源、构建脚本、运行镜像 digest、SBOM 格式、漏洞与许可证策略、密钥存储位置、CI token 权限、可用的隔离环境和风险接受人。未提供阈值、例外期限或业务可用性要求时标记“未确认”，不擅自定为通过。
+
+## 按顺序执行
+
+1. **锁定基线**：记录 commit、lockfile hash、构建器和镜像 digest；检查 lockfile 是否入库、是否由声明文件生成、是否存在未审查的 registry 或安装脚本。
+2. **收集依赖与 SBOM**：用项目批准的 Go/PHP/npm 依赖清单和 SBOM 工具生成可追溯产物，保留工具版本、命令、格式、组件来源和生成时间。无法解析的包或动态下载必须列为未验证。
+3. **扫描漏洞与许可证**：分别运行项目批准的依赖 CVE、SAST、secret、镜像和许可证扫描；将结果按组件、版本、可达性、运行环境、修复版本和许可证义务归档。`govulncheck`、`composer audit`、npm audit 等具体命令以仓库约定为准。
+4. **审查密钥与权限**：扫描 Git 历史、构建日志、镜像层和制品元数据；核对 secret 是否来自批准的管理器、CI 权限是否最小化、短期凭证是否有轮换和吊销证据。发现疑似泄露先按已泄露处理并限制扩散。
+5. **判定与排期**：把漏洞和许可证结果映射到发布范围，区分可利用、运行时可达、开发依赖和误报。每个例外必须有理由、补偿控制、风险接受者、到期日和复查条件；不因扫描工具“无结果”推断不存在风险。
+6. **修复与兼容验证**：优先升级到有来源的修复版本并重新生成 lockfile/SBOM；执行受影响语言、构建、集成和安全回归测试，验证镜像 digest 与运行时加载的版本一致。涉及 Go Web 入口时转 `go-security` 复核实现。
+7. **分阶段发布与回滚**：先在隔离环境或灰度制品验证，再发布不可变 digest。保留上一份 lockfile、SBOM、镜像 digest 和部署参数；失败时恢复整组制品，不只回退声明文件，回滚后重跑健康和扫描检查。
+8. **归档与持续复查**：把报告、原始输出、误报理由、例外期限、修复 PR/commit、回滚演练和待补证据写入审计目录，设定下次扫描和到期提醒。
+
+## 失败、回滚与降级
+
+- 扫描器、registry、私有包或 SBOM 生成不可用：状态为未验证，阻断“供应链已通过”结论，并记录补测依赖。
+- 高危可利用漏洞无修复版本：隔离受影响组件、限制暴露面或暂停发布；补偿控制需有负责人和到期日。
+- 升级引起构建或运行回归：恢复原 lockfile、镜像 digest 与配置，保留失败日志和依赖差异，禁止只删除扫描结果。
+- 密钥疑似泄露：立即吊销/轮换并检查访问日志、制品和缓存；是否需要历史数据处置由安全/事件流程决定。
+
+## 证据记录
+
+报告至少包含范围、commit、工具及版本、命令与退出码、lockfile/SBOM/hash、漏洞/许可证/secret 结果、组件可达性依据、例外批准、修复与回滚证据、未扫描项目及补测条件。状态只能是“通过 / 失败 / 未验证 / 不适用”；扫描工具未覆盖的平台和动态依赖必须单独列出。
+
+## 完成条件
+
+- 所有发布输入（源码、lockfile、镜像 digest、secret 来源）可追溯。
+- 依赖、CVE、SBOM、secret、SAST/DAST、镜像和许可证结果有范围、工具版本及可复现输出。
+- 高风险项已修复、隔离或有明确的风险接受和到期计划；未验证项不会被计入通过。
+- 升级和整组制品回滚均有验证步骤，报告可供另一位审阅者复核。
+
+## 不触发与路由
+
+- Go 的 TLS、JWT、SSRF、输入输出、CSRF 和具体 Web 安全实现转 `go-security`；Go CI 依赖门禁和发布纪律可再读 `go-engineering-governance`。
+- PHP/Laravel 运行时、认证、队列和 Composer 行为转 `senior-php-engineer`；本 skill 只负责跨语言供应链证据。
+- 前端页面权限、浏览器安全、性能和发布准入转 `frontend-acceptance`；前端实现判断转 `senior-frontend-engineer`。
+- 业务后端整体安全/权限准入转 `backend-acceptance`；镜像、主机和集群运维判断转 `senior-devops-engineer`。

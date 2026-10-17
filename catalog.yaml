@@ -422,3 +422,91 @@ skills:
       - references/async-and-api.md
     templates: []
     scripts: []
+  - name: cross-stack-api-contract
+    status: active
+    platforms: [claude, codex]
+    description: "Use when Go/PHP APIs and frontend clients need a shared schema, compatibility policy, error contract, or contract test."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: polyglot-release-engineering
+    status: active
+    platforms: [claude, codex]
+    description: "Use when Go, PHP, frontend assets, and OpenResty must be released, migrated, canaried, or rolled back together."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: php-enterprise-quality
+    status: active
+    platforms: [claude, codex]
+    description: "Use when PHP/Laravel changes need CI gates for tests, static analysis, Composer, migrations, queues, or security checks."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: incident-response
+    status: active
+    platforms: [claude, codex]
+    description: "Use when a production incident spans browser, gateway, PHP-FPM, Go, Redis, database, or external dependencies."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: cross-stack-observability
+    status: active
+    platforms: [claude, codex]
+    description: "Use when aligning request tracing, logs, metrics, sampling, and alerts across OpenResty, PHP, Go, and browsers."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: openresty-gateway-operations
+    status: active
+    platforms: [claude, codex]
+    description: "Use when reviewing or operating Nginx/OpenResty gateways, upstreams, timeouts, buffering, certificates, traffic shifts, and rollback."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: polyglot-security-supply-chain
+    status: active
+    platforms: [claude, codex]
+    description: "Use when governing Go, PHP, npm, frontend, image, secret, SBOM, CVE, and license risks across a software supply chain."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: polyglot-test-engineering
+    status: active
+    platforms: [claude, codex]
+    description: "Use when choosing and proving cross-stack unit, contract, integration, E2E, fault-injection, data, and flaky-test coverage."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: runtime-upgrade-migration
+    status: active
+    platforms: [claude, codex]
+    description: "Use when upgrading Go, PHP/Laravel, Vue/Node, or OpenResty versions/dependencies and needing compatibility, staged migration, rollback evidence."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: fullstack-performance
+    status: active
+    platforms: [claude, codex]
+    description: "Use when tracing or capacity planning browser→OpenResty→PHP/Go→Redis/DB/MQ latency, throughput, errors, or resource regressions."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: async-job-contracts
+    status: active
+    platforms: [claude, codex]
+    description: "Use when defining Laravel Queue, Go MQ, or cross-language event contracts for delivery, idempotency, retries, DLQ, ordering, replay, or compensation."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
