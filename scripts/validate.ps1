@@ -135,8 +135,8 @@ if (-not (Test-Path -LiteralPath $catalogPath)) {
 foreach ($warning in $warnings) {
     Write-Host "WARN $warning" -ForegroundColor Yellow
 }
-foreach ($error in $errors) {
-    Write-Host "ERROR $error" -ForegroundColor Red
+foreach ($validationError in $errors) {
+    Write-Host "ERROR $validationError" -ForegroundColor Red
 }
 
 Write-Host "Checked $($skillDirs.Count) skills: $($errors.Count) errors, $($warnings.Count) warnings."

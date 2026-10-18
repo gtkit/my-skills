@@ -1,0 +1,4 @@
+WARN go-review: 255 lines and no references/; split only if it reduces actual loading
+WARN senior-nodejs-engineer: 264 lines and no references/; split only if it reduces actual loading
+WARN senior-python-engineer: 273 lines and no references/; split only if it reduces actual loading
+Checked 49 skills: 0 errors, 3 warnings.

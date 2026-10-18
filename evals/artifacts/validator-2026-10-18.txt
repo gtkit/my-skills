@@ -1,0 +1,6 @@
+PASS Valid
+PASS MissingName
+PASS MissingDescription
+PASS MissingReference
+PASS CatalogDrift
+5 validator cases; 0 failures.

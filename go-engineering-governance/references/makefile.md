@@ -43,5 +43,5 @@ pgo-refresh:                ## 合并线上采集的 CPU profile，刷新 defaul
 	$(GO) tool pprof -proto profiles/*.pprof > cmd/app/default.pgo
 ```
 
-- `release-check` 实测：工作区不干净 → 列出文件退出 1；`TAG` 为空或不是 `vX.Y.Z` 形式（如 `TAG=foo`）→ 报用法退出 1；`TAG=v2.0.0` 而 path 无 `/v2` → 报错；`TAG=v1.4.0` 而 path 带 `/v2` → 报错；`TAG=v3.0.0` 在 `/v2` 上同样报错（本仓库也不发 v3）；匹配时退出 0。
+- `release-check` 原有实测记录：工作区不干净 → 列出文件退出 1；`TAG` 为空或不是 `vX.Y.Z` 形式（如 `TAG=foo`）→ 报用法退出 1；`TAG=v2.0.0` 而 path 无 `/v2` → 报错；`TAG=v1.4.0` 而 path 带 `/v2` → 报错；`TAG=v3.0.0` 在 `/v2` 上同样报错；匹配时退出 0。本次只修订政策说明，未重跑该 Makefile 示例。项目特有的 major 禁令由项目配置另行检查。
 - `$$` 是 make 转义，awk 里的 `$$3` 到 shell 才是 `$3`；`case` 分支里用 `if`，`cmd && { ...; exit 1; }` 形式在 cmd 失败时会让分支以非 0 结束（这是上一版的 bug）。

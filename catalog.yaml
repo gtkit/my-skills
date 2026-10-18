@@ -425,9 +425,10 @@ skills:
   - name: cross-stack-api-contract
     status: active
     platforms: [claude, codex]
-    description: "Use when Go/PHP APIs and frontend clients need a shared schema, compatibility policy, error contract, or contract test."
+    description: "Use when Go/PHP or gRPC/gateway APIs and clients need shared contracts, schema compatibility, generation, or contract tests."
     ui_metadata: false
-    references: []
+    references:
+      - references/grpc-contracts.md
     templates: []
     scripts: []
   - name: polyglot-release-engineering
@@ -435,8 +436,10 @@ skills:
     platforms: [claude, codex]
     description: "Use when Go, PHP, frontend assets, and OpenResty must be released, migrated, canaried, or rolled back together."
     ui_metadata: false
-    references: []
-    templates: []
+    references:
+      - references/runtime-checks.md
+    templates:
+      - templates/release-report.md
     scripts: []
   - name: php-enterprise-quality
     status: active

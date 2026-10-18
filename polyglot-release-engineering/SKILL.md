@@ -7,7 +7,7 @@ description: "Use when Go, PHP, frontend assets, and OpenResty must be released,
 
 ## 适用场景
 
-当 Go binary、PHP-FPM/Octane、前端静态资产和 OpenResty 配置需要同一发布窗口协同变更时使用，覆盖构建产物、配置、数据库 expand/contract、发布顺序、灰度、health/readiness、缓存和回滚。它编排发布证据，不替代 `senior-devops-engineer` 的基础设施判断、`go-microservice` 的 Go 生命周期实现或 OpenResty 具体配置操作。
+当 Go binary、PHP-FPM/Octane、前端静态资产和 OpenResty 配置中多个组件需要协同发布时使用，覆盖产物、配置、数据库 expand/contract、发布顺序、灰度、health/readiness、缓存和回滚。只加载本次涉及的栈，不要求四者同时存在。它编排发布证据，不替代 `senior-devops-engineer` 的基础设施判断、`go-microservice` 的 Go 生命周期实现或 OpenResty 具体配置操作。
 
 ## 输入与前置事实
 
@@ -21,10 +21,10 @@ description: "Use when Go, PHP, frontend assets, and OpenResty must be released,
 2. **审查配置**：列出环境变量、secret 引用、feature flag、上游地址、超时和证书引用。验证模板渲染、必需项、敏感值来源和旧配置回退；禁止把凭证写进日志或产物。
 3. **设计数据库 expand/contract**：先增加可兼容的列/索引/表或双写路径，再部署能读旧新形态的应用，观察回填和一致性证据，最后在无旧消费者后清理旧结构。每一步声明锁表风险、回滚条件和不可逆动作；具体迁移语义以项目数据库工具和批准方案为准。
 4. **确定顺序**：通常先部署兼容后端与迁移，再切换前端资产和网关；若项目契约要求其他顺序，写出原因和验证点。每步列出 health/readiness、日志、错误率和依赖检查。
-5. **预演与门禁**：在与生产拓扑相近的环境执行构建、启动、迁移、静态资产加载、OpenResty 配置检查和关键请求；记录命令、版本、响应和未验证项。健康检查的依赖范围以服务定义为准，不能把 `/livez` 或 `/readyz` 的含义擅自改写。
+5. **预演与门禁**：按 `references/runtime-checks.md` 中本次涉及的栈验证构建、进程替换/排空、迁移、静态资产加载和关键请求；PHP 常驻进程与前端旧资源必须单列验证。记录命令、版本、响应和未验证项。健康检查的依赖范围以服务定义为准，不能把 `/livez` 或 `/readyz` 的含义擅自改写。只输出计划或无平台授权时不执行这些操作。
 6. **灰度**：选择有代表性的流量/租户/实例集合，先验证路由、鉴权、契约、错误率、延迟、资源和缓存命中；扩大范围前保存每个阶段的观测窗口和批准记录。发现回滚条件时停止扩大流量。
 7. **缓存处理**：列出受影响的 key、TTL、版本前缀、预热或失效动作和回滚后的兼容性。只执行已授权的清理/预热，记录影响范围和结果；不要用全量删除代替原因分析。
-8. **收口**：确认所有实例运行目标产物、迁移状态、静态资产引用、OpenResty reload/restart 结果、readiness、关键业务探针和监控告警。关闭弃用开关前检查旧版本流量已归零并保留回滚包。
+8. **收口**：逐实例和 worker 核对运行版本，记录 Go 排空、FPM/OPcache、Octane/队列、前端 HTML/资源及 OpenResty 配置的生效证据；不能仅凭文件已复制或控制台“发布成功”判断。关闭兼容路径前检查旧消费者与旧页面保留窗口，保留回滚包和资源；按 `templates/release-report.md` 汇总。
 
 ## 失败与回滚
 
@@ -40,7 +40,12 @@ description: "Use when Go, PHP, frontend assets, and OpenResty must be released,
 
 ## 完成条件
 
-所有目标组件都使用可追溯产物，迁移和配置处于批准状态，灰度证据满足发布方案，健康检查和关键指标已观测，回滚包与步骤可执行，未验证项已显式升级；否则保持“进行中/阻断”，不标记稳定发布。
+区分“发布计划已交付”和“发布验证通过”。计划请求可交付带未验证项的方案；实际发布要求目标组件版本、迁移、灰度、业务探针与回滚证据满足方案。关键项未验证时保持“未验证/阻断”，不因记录风险而标稳定发布。
+
+## 按需资源
+
+- 发布涉及的运行时检查与回滚：`references/runtime-checks.md`；只读对应栈。
+- 发布计划/执行/回滚统一记录：`templates/release-report.md`。
 
 ## 不触发与路由
 

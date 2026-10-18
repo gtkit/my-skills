@@ -14,8 +14,8 @@ lint、CI 门禁、依赖治理、API 兼容、发布纪律、PGO 流程与项�
 2. lint 白名单制（`linters.default: none`），每个 linter 说得出抓什么；开 `all` 再逐个关是噪音源。
 3. `go mod tidy -diff` 进门禁：有差异时 exit 1（实测），CI 不得自动 tidy 后继续。
 4. 工具版本钉死：lint action 的 `version:`、go.mod 的 `tool` 指令、Makefile 变量；裸 `@latest` 只出现在定期升级任务里。
-5. 导出 API 变更过 `apidiff -incompatible`；有输出就要么改回，要么走 fail-closed 的 MINOR 发布 + ⚠ CHANGELOG。
-6. 永不发 v3 及更高 major，module path 不迁 `/v3`；破坏性变更留在现有 major 线，只允许 fail-closed 形态。
+5. 导出 API 变更过 `apidiff -incompatible`；有输出先阻断发布，按项目兼容性承诺选择保持兼容、推迟变更或经授权进行 major 迁移；CHANGELOG 和迁移说明不能代替兼容性。
+6. “不发 v3”“只允许 patch/minor”等是项目政策，读取 harness/项目发布约定后执行，不把它推广到所有 Go 模块。项目禁止 major 时，破坏性变更保持阻断，不能用 MINOR 和警告文字绕过。
 7. 打 tag 前 `git status --porcelain` 必须为空；tag 的 major 必须与 module path 的 `/vN` 后缀一致。
 8. 弃用只有一种机制：`Deprecated:` 注释段落 + staticcheck SA1019；删除弃用符号是破坏性变更。
 9. `default.pgo` 进仓库放 main 包目录，`go build` 默认 `-pgo=auto` 自动生效，`go version -m` 里有 `build -pgo=<path>` 才算生效（实测）。
@@ -55,14 +55,14 @@ $ apidiff -incompatible old.export new.export
 
 - 不加 `-incompatible` 还会列 `Compatible changes:`（新增字段、新增函数）。退出码始终 0，门禁要判断输出为空：`test -z "$(apidiff -incompatible old.export new.export)"`。`-m` 直接比两个模块路径。
 - 语义化版本：MAJOR 破坏、MINOR 新增、PATCH 修复；v0.x 允许破坏但同样写 CHANGELOG；`+incompatible` 后缀是没有 go.mod 的 v2+ 模块，尽快让上游补 go.mod 或 fork。
-- 破坏性变更的唯一允许形态（不升 major）：旧的危险行为改成显式报错，错误信息里写出路。例：`Timeout=0` 原表示不超时，改为 `return nil, errors.New("Timeout 必须 > 0；原来的 0 表示不超时，请显式传 time.Hour 或用 WithNoTimeout()")`。把 0 静默变成 30s 是禁止的静默改语义。CHANGELOG 条目以 ⚠ 开头并附迁移步骤。
+- 将旧的成功行为改成显式报错（fail-closed）仍可能破坏调用方，不能自动算作 MINOR。先评估既有契约和安全影响；按项目允许的 major/安全发布政策确定版本、风险接受与迁移路径。禁止静默改默认值，不能靠 CHANGELOG 中的 ⚠ 消除兼容风险。
 - `Deprecated:` 独立段落、以 `Deprecated:` 开头、写替代品与保留承诺。`go doc` 照常列出弃用符号（实测，只有 `-all` 才显示 Deprecated 段），所以弃用的执行力只来自 staticcheck SA1019 在调用处报（`staticcheck -explain SA1019`）与 gopls 的删除线：
 
 ```go
 // Fetch 拉取一条记录。
 //
 // Deprecated: 不带 ctx 无法取消与超时，改用 FetchContext。本函数保留为转发调用，
-// 不会在当前 major 线上删除（本仓库不发新 major）。
+// 不会在当前 major 线上删除。
 func Fetch(id string) ([]byte, error) { return FetchContext(context.Background(), id) }
 
 // FetchContext 拉取一条记录，ctx 控制超时与取消。
@@ -128,9 +128,9 @@ internal/platform       日志、配置、可观测性初始化
 - [ ] `GOTOOLCHAIN=local`，Go 版本只在 go.mod 一处
 - [ ] `GOPRIVATE` 覆盖全部私有模块前缀
 - [ ] `replace` 只指向已发布 tag 且写了移除条件；go.work 不进仓库
-- [ ] 导出 API 变更跑过 `apidiff -incompatible`；破坏性变更是 fail-closed 形态且 CHANGELOG 有 ⚠
+- [ ] 导出 API 变更跑过 `apidiff -incompatible`；破坏性变更按项目版本政策阻断或完成经授权的 major 迁移
 - [ ] 弃用符号有 `Deprecated:` 段落与替代品，没有直接删除
-- [ ] 发版前工作区干净、tag major 与 module path 一致、不发 v3+
+- [ ] 发版前工作区干净、tag major 与 module path 一致、遵守项目明确的 major 限制
 - [ ] `default.pgo` 在 main 包目录且 `go version -m` 能看到 `-pgo=`
 - [ ] `go generate` 产物与源一致（CI diff 检查）
 - [ ] repository 层不 import HTTP 框架（depguard 规则在跑）

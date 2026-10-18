@@ -1,0 +1,4 @@
+go version go1.27.1 windows/amd64
+go vet .local/governance-example.go
+GO_EXAMPLE_VET_EXIT=0
+运行时Go 1.27.1；仅注释措辞修订，未更改示例实现。

@@ -26,6 +26,13 @@
 | 只想修改一个 Vue 组件的样式或状态，不涉及接口、发布或测试策略 | `vue-frontend-engineer` | `cross-stack-api-contract`、`polyglot-test-engineering` | 不因“前端”泛词触发跨栈 SOP |
 | 只审查一段 Lua 的 `ngx.shared.DICT` 用法 | `openresty-patterns` | `openresty-gateway-operations` | 代码模式优先，不进入网关发布操作 |
 | 只运行一次 `composer audit` 或 `npm audit` 查看输出 | 无新增跨栈 skill | `polyglot-security-supply-chain` | 单次机械命令不等于供应链治理流程 |
+| proto 是唯一源，grpc-gateway 生成 OpenAPI v2 给 PHP/Vue | `cross-stack-api-contract` + proto-first参考 | 手写第二份 OpenAPI schema | 保留 proto→生成物链，使用 definitions，验证 ProtoJSON/int64/presence |
+| 已授权 Go 并发修复和回归测试，不要再次询问写测试 | `go-enterprise-quality` | 重复请求测试授权或删除已有契约声明 | 在范围内补测；无证据标未证实 |
+| 按已鉴权用户 ID 限流，指标使用 route/status；只审查不 reload | `openresty-gateway-operations` | 排除所有用户级限流key或直接reload | 信任边界、zone容量与监控label分开处理 |
+| PHPUnit 通过，静态分析缺工具、关键重投未测，负责人已有待办 | `php-enterprise-quality` | 把报告完成当作门禁通过 | 未验证关键项仍阻断，不自动安装 |
+| 只改 Go 说明文档，不改变运行行为 | 无代码质量门禁 | `go-enterprise-quality` | 不重复授权、不启动build/反证/部署 |
+| 项目禁止 major，接口破坏但想按 MINOR 发版 | `go-engineering-governance` | 以fail-closed或CHANGELOG绕过兼容门禁 | 保留项目政策并阻断破坏性发布 |
+| 联合发布无平台权限，只要计划；旧前端页面和PHP worker仍在运行 | `polyglot-release-engineering` | 执行reload或把发布计划写成稳定发布 | 读取按栈检查表，列旧资源/OPcache/常驻进程/排空，运行未验证 |
 
 ## 记录格式
 
@@ -34,3 +41,5 @@
 - **预期**：应触发、不得触发或允许并存的 skill。
 - **结果**：实际触发、读取资源、授权分支和完成条件。
 - **未验证项**：模型、平台、工具权限或外部依赖缺失时明确列出。
+
+维护记录与受控任务结果见 [2026-10-18 修复验证](maintenance-2026-10-18.md)。显式加载的代理任务只能验证这些提示下的行为，不代表自动触发率或生产可用性。

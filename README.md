@@ -51,7 +51,7 @@
 | `go-performance` | pprof 安全暴露与读法、mutex/block profile、线上排障路径、`GOMEMLIMIT`、PGO、GOMAXPROCS 容器感知、逃逸分析输出解读、分配优化、Benchmark |
 | `go-security` | 传输/入口/应用/数据/供应链分层：TLS、JWT v5 与密钥轮换、argon2id、IDOR、SSRF 安全客户端、解析炸弹、路径穿越、CSRF、安全头、`govulncheck` |
 | `go-websocket-sse` | WS/SSE/长轮询选型、单读单写规则、纯 actor Hub、优雅关闭、背压策略、水平扩展、连接数预算、SSE `Last-Event-ID` 补发 |
-| `go-engineering-governance` | `.golangci.yml`（v2）、CI 门禁流水线、依赖治理、`apidiff` 与兼容性、fail-closed 破坏性变更、发布纪律、PGO 流程、项目布局 |
+| `go-engineering-governance` | `.golangci.yml`（v2）、CI 门禁流水线、依赖治理、`apidiff` 与兼容性、按项目版本政策阻断破坏性发布、PGO 流程、项目布局 |
 
 ### 其他语言/领域专项
 
@@ -64,7 +64,7 @@
 
 | skill | 内容 |
 |---|---|
-| `cross-stack-api-contract` | Go/PHP 后端与前端之间的 OpenAPI/JSON Schema、错误 envelope、分页、鉴权、兼容性、生成和契约测试；不替代具体 handler 实现或最终验收。 |
+| `cross-stack-api-contract` | Go/PHP、gRPC/gateway 与客户端的契约、proto-first/OpenAPI/JSON Schema、错误、分页、鉴权、兼容性和生成测试；不替代实现或最终验收。 |
 | `polyglot-release-engineering` | Go、PHP-FPM/Octane、前端资产和 OpenResty 的统一发布、数据库 expand/contract、灰度、缓存、健康检查和回滚。 |
 | `php-enterprise-quality` | PHP/Laravel 的 PHPUnit/Pest、PHPStan/Psalm、Pint、Composer、迁移、队列和 CI 质量门禁。 |
 | `incident-response` | 浏览器、网关、PHP-FPM、Go、Redis、数据库的事故分级、止损、证据链、回滚、降级和复盘。 |
@@ -91,7 +91,7 @@
 
 ## 组合方式
 
-- 任何 Go 代码：`use-modern-go` 常驻；交付前验证走 `go-enterprise-quality`（验证深度按改动类型分级，文案改动只跑 build/vet）；审查走 `go-review`；架构与选型问题走 `senior-go-engineer`，方案文档走 `tech-design-review`；具体领域再叠加对应的 go-* 专项。
+- 任何 Go 代码：`use-modern-go` 常驻；交付前验证走 `go-enterprise-quality`（按影响面分级；纯文档不触发，源码日志/错误文本修改才跑 build/vet）；审查走 `go-review`；架构与选型问题走 `senior-go-engineer`，方案文档走 `tech-design-review`；具体领域再叠加对应的 go-* 专项。
 - 前端开发走 `vue-frontend-engineer`（Vue 3 项目）或 `senior-frontend-engineer`（跨框架判断）；交付验收再走 `frontend-acceptance`。前端发现授权、事务、幂等或数据一致性问题时，升级到 `backend-acceptance`。
 - 后端交付验收优先走 `backend-acceptance`，再按语言和风险路由到 `go-review`、`go-enterprise-quality`、`go-testing`、`go-data-consistency`、`go-security`、`go-database-patterns`、`go-stability-engineering`、`go-microservice` 或对应的 `senior-*` skill。
 - Go/PHP/前端/OpenResty 的接口联调先走 `cross-stack-api-contract`；发布顺序、迁移、灰度或回滚走 `polyglot-release-engineering`；PHP 代码交付门禁走 `php-enterprise-quality`。
@@ -133,12 +133,15 @@
 | `sync.sh [name...]` | 把 skill 目录同步到 `~/.claude/skills` 与 `~/.codex/skills`（`TARGETS` 可覆盖）；目标目录里仓库没有的 skill 保持不动 |
 | `sync.ps1 [name...]` | 同上，Windows 原生 PowerShell 版，用 robocopy /MIR 镜像到 `%USERPROFILE%\.claude\skills` 与 `%USERPROFILE%\.codex\skills`（`$env:TARGETS` 可覆盖，分号分隔） |
 | `scripts/validate.ps1` | 校验 frontmatter、目录名、相对引用、描述长度、文件长度和 `catalog.yaml` 覆盖范围 |
+| `scripts/test-validate.ps1` | 有效输入和缺字段、坏引用、catalog 漂移等错误分支回归；读取层注入，无需修改真实 skill 或创建项目副本 |
+| `scripts/check-harness-dependencies.ps1 [-HarnessRoot path]` | 核对相邻 harness-doctor 依赖清单中的技术 skill 源文件，缺失时失败；不证明安装或运行 |
 
 ## 维护入口
 
 - `AGENTS.md` 只记录修改分级、必读文件、校验命令和发布边界，不承载领域知识或动态状态。
 - `catalog.yaml` 记录 skill 的状态、适用平台、references 和 Codex UI 元数据；以各目录的 `SKILL.md` 为内容源。
 - `evals/routing.md` 记录应触发、不应触发和边界场景；场景推演不等同于真实模型评测。
+- harness 的阶段依赖见 `harness-engineering/skills/harness-doctor/references/skill-dependencies.md`（位于相邻仓库）；doctor 区分文件存在、运行时可发现与本次已执行。安装状态不能代替门禁结果。
 - 改动 skill 前先运行 `pwsh -File scripts/validate.ps1`；修改触发语义、授权边界或跨 skill 路由时，先按 `evals/routing.md` 做静态推演，目标平台和工具可用时再做代表场景运行验证。
 
 ## 维护规则

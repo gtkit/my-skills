@@ -1,0 +1,2 @@
+Checked 24 harness dependencies; 0 missing sources.
+Source coverage only: this does not prove installation, runtime discovery, or task execution.
