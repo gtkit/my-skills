@@ -1,6 +1,6 @@
 # skills
 
-面向生产环境的工程 skill 集合，每个子目录一个 skill（`<name>/SKILL.md`），可直接放入 `~/.claude/skills`、`~/.codex/skills`，或用 `pack.sh` 打包为 `.skill` 上传到 claude.ai。
+面向生产环境的工程 skill 集合，每个子目录一个 skill（`<name>/SKILL.md`）。同步脚本默认安装到 Codex 的 `~/.agents/skills`，并备份迁移旧 Codex 目录里的本仓库同名副本。其他支持 Agent Skills 的工具可按各自约定安装，也可用 `pack.sh` 打包为 `.skill`。
 
 目标水准：资深技术专家——不只把代码写对，还要给出架构判断、稳定性兜底、方案取舍，并且每条规则可证伪、每段代码可编译。
 
@@ -87,7 +87,7 @@
 - 本仓库负责**通用工程知识**：语言写法、框架用法、并发、数据、稳定性、安全、测试、性能。同一主题只在这里写全，`.harness/guides/` 不再复制一份。
 - [harness-engineering](../harness-engineering) 负责**项目约定**：技术栈选型（gtkit 系列）、分层与依赖方向、DTO 与错误码、支付与迁移流程、门禁命令、错误记忆；其 guide 涉及通用知识时指向本仓库对应 skill。
 - [openspec-auto-bootstrap](../openspec-auto-bootstrap) 负责**流程**：什么请求要先出 proposal / spec / tasks，改代码前后的守门与收口。
-- 三者装进同一个项目互不覆盖：skill 走 `~/.claude/skills` 与 `~/.codex/skills`，harness 与 openspec-auto 的产物全在项目里且只写 `.git/info/exclude`。
+- 三者装进同一个项目互不覆盖：通用 skill 默认走 `~/.agents/skills`；harness 与 openspec-auto 的项目工作流 skill 走项目 `.agents/skills`，其余项目产物按各自安装器写入并由 `.git/info/exclude` 忽略。
 
 ## 组合方式
 
@@ -130,11 +130,31 @@
 | 脚本 | 用途 |
 |---|---|
 | `pack.sh [name...]` | 打包为 `_dist/<name>.skill`（zip），排除 `.DS_Store` |
-| `sync.sh [name...]` | 把 skill 目录同步到 `~/.claude/skills` 与 `~/.codex/skills`（`TARGETS` 可覆盖）；目标目录里仓库没有的 skill 保持不动 |
-| `sync.ps1 [name...]` | 同上，Windows 原生 PowerShell 版，用 robocopy /MIR 镜像到 `%USERPROFILE%\.claude\skills` 与 `%USERPROFILE%\.codex\skills`（`$env:TARGETS` 可覆盖，分号分隔） |
+| `sync.sh [name...]` | 用 rsync 校验并镜像到 `~/.agents/skills`；备份旧内容，成功后迁移旧 Codex 同名副本；其他 skill 保持不动 |
+| `sync.ps1 [name...]` | 同上，Windows 原生 PowerShell 版，用 robocopy /MIR；默认目标为 `%USERPROFILE%\.agents\skills` |
+| `scripts/test-sync.sh` | 在临时目录验证同步、备份、选择同步、链接和非法目标保护，不改真实用户安装目录 |
 | `scripts/validate.ps1` | 校验 frontmatter、目录名、相对引用、描述长度、文件长度和 `catalog.yaml` 覆盖范围 |
 | `scripts/test-validate.ps1` | 有效输入和缺字段、坏引用、catalog 漂移等错误分支回归；读取层注入，无需修改真实 skill 或创建项目副本 |
 | `scripts/check-harness-dependencies.ps1 [-HarnessRoot path]` | 核对相邻 harness-doctor 依赖清单中的技术 skill 源文件，缺失时失败；不证明安装或运行 |
+
+## 同步到 Codex
+
+在本仓库运行：
+
+```bash
+./sync.sh                         # 全量同步；仓库更新后再次执行
+./sync.sh go-review go-testing    # 只更新并迁移指定 skill
+```
+
+Windows 原生 PowerShell 对应 `./sync.ps1` 和 `./sync.ps1 go-review go-testing`。
+
+- `TARGETS` 控制实际同步位置，未设置或留空时只同步 `~/.agents/skills`，目录不存在会创建。Shell 版用空格分隔绝对路径，因此自定义路径不能含空格；PowerShell 版用分号分隔，可包含空格。默认目录本身支持带空格的用户路径。
+- `CODEX_HOME` 用于定位旧的 `skills` 和备份目录；必须是绝对路径，未设置或留空时回落 `~/.codex`。例如 Shell 可用 `CODEX_HOME=/path/to/codex ./sync.sh`，PowerShell 可用 `$env:CODEX_HOME = 'C:\Codex'; ./sync.ps1`。它不改变默认同步目标 `~/.agents/skills`。
+- 默认不写入或创建 Claude 的 skills 目录。自定义目标示例：`TARGETS="/tmp/skills-a /tmp/skills-b" ./sync.sh`；PowerShell 对应 `$env:TARGETS = 'C:\skills-a;D:\skills-b'; ./sync.ps1`。自定义目录还需由实际运行时发现，脚本不会替你配置运行时。
+- 已有的同名目标在覆盖前整目录备份到 `$CODEX_HOME/skill-sync-backups/<唯一批次>/target-<序号>/<name>`。默认使用 `~/.codex/skill-sync-backups`，位于技能扫描目录之外；目标中的旧链接只移动链接本身，避免镜像更新修改链接指向的目录。`.DS_Store` 不同步。
+- 全部目标同步并校验成功，且其中包含默认 `~/.agents/skills` 时，才把旧 `$CODEX_HOME/skills/<name>` 移到同批次的 `legacy/<name>`。只迁移本次选中的仓库 skill，不动 `.system`、插件或其他第三方 skill；旧 Codex skills 目录不能再作为同步目标。恢复时可从备份复制对应 skill 到 `~/.agents/skills/<name>`。
+- Codex 先发现 skill 的名称和描述，按任务匹配后才加载正文。若当前列表仍显示旧路径或重复项，重启 Codex 并开启新会话。同步成功证明安装内容已更新，不能代替真实任务中的自动触发与执行证据。[官方说明](https://learn.chatgpt.com/docs/build-skills)
+- harness 的技术 skill 路由会解析到这份用户级安装；同步不会改写任何业务项目的 `AGENTS.md` 或 `.harness/guides`，已有项目模板的更新仍由 harness 安装器负责。
 
 ## 维护入口
 
