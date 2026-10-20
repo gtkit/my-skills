@@ -5,6 +5,13 @@ description: 资深 Node.js 服务端判断与代码：进程生命周期与优�
 
 # 资深 Node.js 服务端工程师
 
+## 前置必读：拒绝猜测与改动边界
+
+- 每次使用本 skill、恢复任务及执行任何改动前，先实际读取本节、当前运行环境已配置的全局规则，以及目标项目已有的协作规则和错误记录。按已明确的配置入口定位，不猜路径、不硬编码本机目录，不以记忆或摘要替代；必需规则无法读取时停止改动并说明。
+- 需求、接口、字段、权限、默认值、路径、工具能力、依赖与兼容结论必须有用户指令、已读取源码/配置、已核实官方资料或真实执行证据。未知保持未确认，先核实；仍不明确就停止依赖该信息的步骤，不凭猜测补全，不重复询问已经明确的要求。
+- 修改代码前先完成并落盘方案和逐步计划，写清范围、文件、兼容约束、风险、回滚和验收；只执行获准范围及阶段。计划、候选原因和未执行步骤标为待验证，不能当作事实或已完成结果。
+- 只有真实执行并回读后才能报告完成或通过，区分失败、未执行、未验证和不适用；模拟与静态证据不冒充真实链路。纯文档、注释、规则或 skill 说明任务只编辑指定内容并回读，不因本 skill 的流程扩展为测试、构建、同步、打包或 OpenSpec 操作。
+
 面向生产的 Node.js：进程与运行时行为、模块系统、框架与数据库层、安全与排查。浏览器端归 senior-frontend-engineer。
 
 ## 工作方式
@@ -146,7 +153,7 @@ server.listen(3000);
 
 - 测试：`node --test`（`node:test` + `node:assert`），`mock.method`/`mock.timers`、`--experimental-test-coverage`、`--test` 配 `--watch`、快照 `t.assert.snapshot()`（22.3+）。小服务不需要 Jest/Vitest；需要 ESM 模块 mock 生态或浏览器模式再上 Vitest。
 - 配置：`--env-file=.env`、`--env-file-if-exists`（22.9+）、`process.loadEnvFile()`；`util.parseArgs` 替代 yargs 做简单 CLI。
-- `node --watch` 替代 nodemon；`node --run <script>`（22+）比 `npm run` 少一层进程；`NODE_COMPILE_CACHE=/tmp/nc` 或 `module.enableCompileCache()` 加速冷启动。
+- `node --watch` 替代 nodemon；`node --run <script>`（22+）比 `npm run` 少一层进程；`NODE_COMPILE_CACHE`（设为已核实可写的缓存目录）或 `module.enableCompileCache()` 可用于编译缓存；实际冷启动收益需测量。
 - `node:sqlite`（22.5+，24 仍带 ExperimentalWarning）嵌入式存储；`AsyncLocalStorage` 做请求上下文（24 起默认 `AsyncContextFrame` 实现，开销大幅下降）；`AbortSignal.any()`、`Promise.withResolvers()`、`structuredClone`、`crypto.hash()` 一次性哈希（21.7+）。
 - `--permission`（`--allow-fs-read=...` 等）限制脚本文件/子进程/worker 权限；`--experimental-sea-config` 打单文件可执行。
 

@@ -76,6 +76,20 @@
 | `fullstack-performance` | 浏览器到网关、PHP/Go、Redis、数据库和 MQ 的性能预算、基线、压测、定位和容量评估。 |
 | `async-job-contracts` | Laravel Queue、Go MQ 和跨语言事件的 schema 版本、投递语义、幂等、重试、DLQ、顺序和回放。 |
 
+### 第三方前端设计技能
+
+以下目录保留上游固定提交的原始内容、许可证及已有作者声明；本仓库新增的 `UPSTREAM.md` 记录来源、提交、导入日期和本地包装差异，不改写上游 `SKILL.md` 或调用策略。
+
+| skill | 用途 | 许可证与来源 |
+|---|---|---|
+| `frontend-design` | 根据产品和受众确定视觉方向、字体、配色与布局 | Apache-2.0；[来源与提交](frontend-design/UPSTREAM.md) |
+| `anti-ui-slop` | 产品界面、打磨、设计审查与视觉检查 | Apache-2.0；iOS 衍生材料另含 MIT 声明；[来源与提交](anti-ui-slop/UPSTREAM.md) |
+| `high-end-visual-design` | 明确选择玻璃质感、大留白、柔和阴影与动效的视觉风格 | MIT；[来源与提交](high-end-visual-design/UPSTREAM.md) |
+
+`high-end-visual-design` 保留上游显式调用策略，使用 `$high-end-visual-design` 指定。三个技能沿用现有单向同步：先维护本仓库，再执行 `./sync.sh frontend-design anti-ui-slop high-end-visual-design` 安装到 `~/.agents/skills`。上游更新应按明确提交重新导入，并同步更新来源记录；不从安装副本反向覆盖上游记录。
+
+为保持原文，`frontend-design` 和 `anti-ui-slop` 的描述保留超过本仓库 150 字符约定的上游长度。现有 `scripts/validate.ps1` 没有第三方豁免，按其当前规则这两项会报描述长度错误；该差异不代表已通过全仓校验。
+
 ### 流程工具
 
 | skill | 内容 |

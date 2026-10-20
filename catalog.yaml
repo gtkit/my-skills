@@ -513,3 +513,36 @@ skills:
     references: []
     templates: []
     scripts: []
+  - name: frontend-design
+    status: active
+    platforms: [claude, codex]
+    description: Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated defaults.
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
+  - name: anti-ui-slop
+    status: active
+    platforms: [claude, codex]
+    description: Stop coding agents from shipping generic UI. Use UIZZE's 800,000+ real web and iOS screens to build product-specific interfaces, define a design contract, cover required states, and run a hard finish gate. Use when designing, implementing, redesigning, critiquing, or pre-ship reviewing a web or iOS interface in Codex, Claude Code, Cursor, Copilot, or another coding agent. Trigger with "anti-ui-slop", "stop UI slop", "ground this UI in real screens", or "run the UI finish gate".
+    ui_metadata: true
+    references:
+      - reference/audit.md
+      - reference/craft.md
+      - reference/distill.md
+      - reference/ios.md
+      - reference/new-work.md
+      - reference/operate.md
+      - reference/overdrive.md
+      - reference/polish.md
+      - references/uizze-reference-policy.md
+    templates: []
+    scripts: []
+  - name: high-end-visual-design
+    status: active
+    platforms: [claude, codex]
+    description: "Classic style skill, opt-in: it runs only when called by name. A calm, polished look with soft contrast, generous whitespace and spring motion."
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []

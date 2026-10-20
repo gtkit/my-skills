@@ -5,6 +5,13 @@ description: "Use for multi-step planning in Claude.ai Web; keep task_plan.md, f
 
 # Planning with Files (Web Edition)
 
+## 前置必读：拒绝猜测与改动边界
+
+- 每次使用本 skill、恢复任务及执行任何改动前，先实际读取本节、当前运行环境已配置的全局规则，以及目标项目已有的协作规则和错误记录。按已明确的配置入口定位，不猜路径、不硬编码本机目录，不以记忆或摘要替代；必需规则无法读取时停止改动并说明。
+- 需求、接口、字段、权限、默认值、路径、工具能力、依赖与兼容结论必须有用户指令、已读取源码/配置、已核实官方资料或真实执行证据。未知保持未确认，先核实；仍不明确就停止依赖该信息的步骤，不凭猜测补全，不重复询问已经明确的要求。
+- 修改代码前先完成并落盘方案和逐步计划，写清范围、文件、兼容约束、风险、回滚和验收；只执行获准范围及阶段。计划、候选原因和未执行步骤标为待验证，不能当作事实或已完成结果。
+- 只有真实执行并回读后才能报告完成或通过，区分失败、未执行、未验证和不适用；模拟与静态证据不冒充真实链路。纯文档、注释、规则或 skill 说明任务只编辑指定内容并回读，不因本 skill 的流程扩展为测试、构建、同步、打包或 OpenSpec 操作。
+
 Manus-style persistent markdown planning adapted for Claude.ai's web/computer-use environment. Use the filesystem as external memory to overcome context window limitations.
 
 ## Core Principle
@@ -37,13 +44,15 @@ In Claude.ai, Claude has access to a Linux computer with bash, file creation, an
 
 ## Quick Start Workflow
 
-Before ANY complex task, run the initialization script:
+Before an authorized complex task, use the actual environment and skill metadata to locate the skill directory, a writable planning directory, and any deliverable directory. In the examples below, `skill_dir`, `plan_dir`, and `output_dir` must already contain those verified paths; do not infer a fixed installation or home directory.
+
+Read the templates and create only the authorized planning files, preserving any existing content:
 
 ```bash
-bash /mnt/skills/user/planning-with-files-web/scripts/init-session.sh
+cat "$skill_dir/templates/task_plan.md"
 ```
 
-This creates the three planning files in `/home/claude/`. Then:
+The bundled initialization and status scripts currently use a fixed working directory internally. Read their actual contents before considering execution; run them only when that destination is verified and authorized. Otherwise use the available file tools and templates. These scripts are not made configurable merely by setting the example variables. Then:
 
 1. **Fill in `task_plan.md`** with the task goal, phases, and key questions
 2. **Work through phases**, updating files as you go
@@ -53,7 +62,7 @@ This creates the three planning files in `/home/claude/`. Then:
 
 ## The 3-File Pattern
 
-For every complex task, maintain THREE files in `/home/claude/`:
+For an authorized complex task that needs these files, maintain THREE files in the verified `plan_dir`:
 
 | File | Purpose | When to Update |
 |------|---------|----------------|
@@ -70,7 +79,7 @@ Templates are available at:
 
 Read these templates when creating new planning files:
 ```bash
-cat /mnt/skills/user/planning-with-files-web/templates/task_plan.md
+cat "$skill_dir/templates/task_plan.md"
 ```
 
 ## Critical Rules
@@ -80,11 +89,11 @@ cat /mnt/skills/user/planning-with-files-web/templates/task_plan.md
 Never start a complex task without creating `task_plan.md`. This is your roadmap.
 
 ```bash
-# Step 1: Initialize files
-bash /mnt/skills/user/planning-with-files-web/scripts/init-session.sh
+# Read the template from the verified skill directory.
+cat "$skill_dir/templates/task_plan.md"
 
-# Step 2: Fill in the goal and phases
-str_replace task_plan.md "[One sentence describing the end state]" "Build a REST API with user auth and CRUD operations"
+# Use the available file-editing tool to create or update the authorized
+# task_plan.md in plan_dir, then write the actual goal and approved phases.
 ```
 
 ### Rule 2: The 2-Action Rule
@@ -99,7 +108,7 @@ Before major decisions, re-read the plan file. This exploits the "attention mani
 
 ```bash
 # Re-read plan before a critical decision
-cat /home/claude/task_plan.md
+cat "$plan_dir/task_plan.md"
 ```
 
 ### Rule 4: Update After Act
@@ -172,30 +181,30 @@ If you can answer all five, your context management is solid:
 
 Periodically run this check, especially after many tool calls:
 ```bash
-bash /mnt/skills/user/planning-with-files-web/scripts/check-status.sh
+cat "$plan_dir/task_plan.md"
 ```
 
 ## Web Environment Adaptations
 
 Unlike Claude Code, the web environment has some differences:
 
-1. **No hooks** — You must manually re-read plans and update files (Claude Code has PreToolUse/PostToolUse hooks that do this automatically)
-2. **Working directory** — Use `/home/claude/` for planning files, `/mnt/user-data/outputs/` for deliverables
-3. **File delivery** — Use `present_files` tool to share final outputs with the user
-4. **Session persistence** — Files persist within a session but reset between tasks. For multi-session work, deliver planning files to the user via outputs
+1. **Hooks** — Verify the actual environment capabilities; when no applicable hooks are available, re-read plans and update authorized files manually.
+2. **Working directory** — Resolve writable planning and deliverable directories from the actual environment and authorization; do not hardcode machine paths.
+3. **File delivery** — Use the file-delivery tool or artifact links actually available in the current environment; do not assume a tool name or API.
+4. **Session persistence** — Verify the actual storage lifetime. For multi-session work, deliver the authorized planning files through the verified output location.
 
 ### Delivering Planning Files Between Sessions
 
 If the user needs to continue work in a future session, copy planning files to outputs:
 ```bash
-cp /home/claude/task_plan.md /home/claude/findings.md /home/claude/progress.md /mnt/user-data/outputs/
+cp "$plan_dir/task_plan.md" "$plan_dir/findings.md" "$plan_dir/progress.md" "$output_dir/"
 ```
 
 The user can then upload these files in the next session to resume.
 
 ### Never let planning files enter a repository
 
-Planning files live in `/home/claude/`, outside any project checkout. If a task requires writing them inside a git working tree (for example, the user asks for the plan next to the code), add them to the local, untracked exclude list first — never to the tracked `.gitignore`:
+Choose a verified planning location outside a project checkout unless the user requests the plan in the project. If a task requires writing them inside a git working tree (for example, the user asks for the plan next to the code), add them to the local, untracked exclude list first — never to the tracked `.gitignore`:
 
 ```bash
 ex="$(git rev-parse --git-dir)/info/exclude"
@@ -222,7 +231,7 @@ Confirm with `git status --porcelain` before delivering that none of the three f
 
 For deeper understanding of the context engineering principles behind this skill, read:
 ```bash
-cat /mnt/skills/user/planning-with-files-web/references/manus-principles.md
+cat "$skill_dir/references/manus-principles.md"
 ```
 
 ## Scripts

@@ -5,6 +5,13 @@ description: Use when tracing or capacity planning browser→OpenResty→PHP/Go�
 
 # 全栈性能预算与回归
 
+## 前置必读：拒绝猜测与改动边界
+
+- 每次使用本 skill、恢复任务及执行任何改动前，先实际读取本节、当前运行环境已配置的全局规则，以及目标项目已有的协作规则和错误记录。按已明确的配置入口定位，不猜路径、不硬编码本机目录，不以记忆或摘要替代；必需规则无法读取时停止改动并说明。
+- 需求、接口、字段、权限、默认值、路径、工具能力、依赖与兼容结论必须有用户指令、已读取源码/配置、已核实官方资料或真实执行证据。未知保持未确认，先核实；仍不明确就停止依赖该信息的步骤，不凭猜测补全，不重复询问已经明确的要求。
+- 修改代码前先完成并落盘方案和逐步计划，写清范围、文件、兼容约束、风险、回滚和验收；只执行获准范围及阶段。计划、候选原因和未执行步骤标为待验证，不能当作事实或已完成结果。
+- 只有真实执行并回读后才能报告完成或通过，区分失败、未执行、未验证和不适用；模拟与静态证据不冒充真实链路。纯文档、注释、规则或 skill 说明任务只编辑指定内容并回读，不因本 skill 的流程扩展为测试、构建、同步、打包或 OpenSpec 操作。
+
 ## 适用场景
 
 用于浏览器请求经过 OpenResty、PHP-FPM/Laravel 或 Go，再访问 Redis、数据库、MQ 的端到端性能预算、基线建立、定位、压测、容量评估和回归。重点是把一次用户请求拆成可观测的阶段，并用同一工作负载比较变更前后结果。
@@ -39,10 +46,10 @@ description: Use when tracing or capacity planning browser→OpenResty→PHP/Go�
 - 浏览器：用 DevTools、Lighthouse 或 Web Vitals 区分 DNS/连接、TTFB、下载、主线程、渲染和资源体积；框架渲染与水合判断路由 `senior-frontend-engineer`。
 - OpenResty：关联 `$request_time`、上游耗时、状态码、连接和缓存命中；Lua API 细节路由 `openresty-patterns`，限流、超时和网关操作叠加 `openresty-gateway-operations`。
 - PHP/Laravel：对照 PHP-FPM 队列、慢日志、OPcache、数据库和外部调用；运行时判断路由 `senior-php-engineer`。
-- Go：用 profile、trace、benchmark 和 `benchstat` 证明 CPU、阻塞、分配或 GC 假设；具体 pprof/GC/PGO 细节路由 `go-performance`。
+- Go：用 profile、trace、benchmark 和 `benchstat` 核对由观测提出的 CPU、阻塞、分配或 GC 候选原因；具体 pprof/GC/PGO 细节路由 `go-performance`。
 - Redis/数据库/MQ：记录命令延迟、命中率、连接池、慢查询/`EXPLAIN`、锁等待、IO、消费 lag 和批量大小；不要把下游平均值当成单请求证据。
 
-### 4. 形成假设并验证
+### 4. 根据观测验证候选原因
 
 1. 从 trace、profile、慢查询或资源曲线选出占预算最大的可证实原因，写明反例和预期变化。
 2. 先做低风险配置或代码实验，再做压测；每次实验保存输入、版本、结果和是否达到预期。
@@ -52,7 +59,7 @@ description: Use when tracing or capacity planning browser→OpenResty→PHP/Go�
 
 1. 设计 closed/open workload、ramp、steady、spike 和恢复阶段；说明是否包含缓存预热、后台任务、批处理和真实数据分布。
 2. 逐步提高到目标负载以上，寻找 SLO、错误率、资源或队列开始恶化的拐点；记录每个阶段的实例数、限额和拓扑。
-3. 用实测拐点估算容量与扩容步长，明确线性假设、共享依赖和余量来源。未覆盖的峰值、跨地域网络或故障场景写“未验证”。
+3. 用实测拐点估算容量与扩容步长，列明实测支持的模型适用范围、共享依赖和余量来源，不把未测负载当作已证实容量。未覆盖的峰值、跨地域网络或故障场景写“未验证”。
 
 ### 6. 回归和收口
 
@@ -67,12 +74,12 @@ description: Use when tracing or capacity planning browser→OpenResty→PHP/Go�
 
 ## 证据记录
 
-报告保存：SLO 与预算来源、工作负载定义、环境/commit/配置、工具与命令、原始及汇总结果、trace/profile/慢查询链接、资源和依赖拓扑、实验假设、容量拐点、回滚记录、成本影响、未验证项和补测条件。每项“改善”同时给出前后窗口、样本量和比较方法。
+报告保存：SLO 与预算来源、工作负载定义、环境/commit/配置、工具与命令、原始及汇总结果、trace/profile/慢查询链接、资源和依赖拓扑、候选原因及验证证据、容量拐点、回滚记录、成本影响、未验证项和补测条件。每项“改善”同时给出前后窗口、样本量和比较方法。
 
 ## 完成条件
 
 - 基线和目标工作负载可复现，关键链路有 request ID/trace 证据。
-- 性能瓶颈由测量支持，优化前后在同一模型下比较；容量结论标明假设和覆盖范围。
+- 性能瓶颈由测量支持，优化前后在同一模型下比较；容量结论标明真实输入、计算方法、未确认项和实际覆盖范围。
 - SLO、错误、资源、成本和回滚影响均有记录；缺失的环境或场景明确标为未验证。
 
 ## 不触发与路由
