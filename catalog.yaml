@@ -41,6 +41,14 @@ skills:
       - references/write-path.md
     templates: []
     scripts: []
+  - name: go-cobra
+    status: active
+    platforms: [claude, codex]
+    description: "使用 spf13/cobra 开发或审查 Go 命令行：命令树、参数与 flags、hook 继承、context、错误与输出、补全和命令测试。Viper 配置分层另见 go-viper。"
+    ui_metadata: false
+    references: []
+    templates: []
+    scripts: []
   - name: go-concurrency
     status: active
     platforms: [claude, codex]
@@ -129,6 +137,14 @@ skills:
       - references/idempotency.md
       - references/request.md
       - references/server.md
+    templates: []
+    scripts: []
+  - name: go-lo
+    status: active
+    platforms: [claude, codex]
+    description: "使用或审查 github.com/samber/lo 的集合转换、查找、分组、条件与指针工具，核对 nil、顺序、别名、错误和并发语义；不因普通 Go 循环自动引库或批量替换。"
+    ui_metadata: false
+    references: []
     templates: []
     scripts: []
   - name: go-microservice
@@ -253,6 +269,14 @@ skills:
       - references/http.md
       - references/integration.md
       - references/unit.md
+    templates: []
+    scripts: []
+  - name: go-viper
+    status: active
+    platforms: [claude, codex]
+    description: "使用或评估 spf13/viper 时处理配置优先级、flag/env 绑定、Unmarshal、校验、热重载与实例隔离；不自动引入依赖、迁移配置或假定必须搭配 Cobra。"
+    ui_metadata: false
+    references: []
     templates: []
     scripts: []
   - name: go-websocket-sse
