@@ -13,7 +13,7 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 - 修改代码前先完成并落盘方案和逐步计划，写清范围、文件、兼容约束、风险、回滚和验收；只执行获准范围及阶段。计划、候选原因和未执行步骤标为待验证，不能当作事实或已完成结果。
 - 只有真实执行并回读后才能报告完成或通过，区分失败、未执行、未验证和不适用；模拟与静态证据不冒充真实链路。纯文档、注释、规则或 skill 说明任务只编辑指定内容并回读，不因本 skill 的流程扩展为测试、构建、同步、打包或 OpenSpec 操作。
 
-goroutine、channel、sync 原语与 context 的正确用法及生产事故高发点。限流/熔断/超时预算见 `go-stability-engineering`；容器内 `GOMAXPROCS` 与 GC 调优见 `go-performance`；测试工具细节见 `go-testing`；现代语法以 `use-modern-go` 为准。
+goroutine、channel、sync 原语与生产事故高发点。context 的传播、取消与脱离请求的契约见 `go-context`；限流/熔断/超时预算见 `go-stability-engineering`；容器内 `GOMAXPROCS` 与 GC 调优见 `go-performance`；测试工具细节见 `go-testing`；现代语法以 `use-modern-go` 为准。
 
 ## 核心规则
 
@@ -23,7 +23,7 @@ goroutine、channel、sync 原语与 context 的正确用法及生产事故高�
 4. 锁内不做 I/O、不做 channel 操作、不调用可能回调持锁代码的函数。
 5. 共享可变状态二选一：锁（数据）或单 goroutine 拥有 + channel 传消息（actor）。不要两者混用于同一份数据。
 6. 有界并发是默认要求：无上限的 `go f()` 在流量尖峰时把下游打挂或 OOM 自己。
-7. 从请求派生的后台任务用 `context.WithoutCancel(ctx)` + 独立超时，否则响应一返回任务就被取消。
+7. 先按 `go-context` 确认任务是否应脱离请求取消；允许继续的进程内后台任务才用 `WithoutCancel` + 独立 I/O 上限，并纳入服务的关停与等待路径。可靠交付另需持久化任务。
 8. 每条"并发安全"注释必须对应一个 `-race` 下运行、去掉同步机制就会失败的测试。
 
 ## 按任务读取
@@ -86,7 +86,7 @@ func putBuf(b *bytes.Buffer) {
 - [ ] channel 只由发送方（或 `wg.Wait` 后的协调者）关闭
 - [ ] 无上限并发全部改为 `SetLimit` / semaphore / 有界队列
 - [ ] worker 内有 `recover` 并记录 `zap.Stack`；关闭后 Submit 返回错误
-- [ ] 请求派生的后台任务用 `WithoutCancel` + 独立超时，并被 `Close` 等待
+- [ ] 脱离请求取消有业务依据；独立 I/O 上限、关停与 `Close` 等待路径明确，未把 goroutine 当成可靠交付保证
 - [ ] 锁内无 I/O、无 channel 操作；`RWMutex` 无递归 RLock
 - [ ] `sync.Map` 只用于文档列出的两种场景；`sync.Pool` Put 前 `Reset` + `Cap()` 检查
 - [ ] `OnceValues` 包裹的初始化不需要失败重试

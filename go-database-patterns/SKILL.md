@@ -12,7 +12,7 @@ description: Go 数据访问层：database/sql、pgx、sqlx、sqlc、GORM 选型
 - 修改代码前先完成并落盘方案和逐步计划，写清范围、文件、兼容约束、风险、回滚和验收；只执行获准范围及阶段。计划、候选原因和未执行步骤标为待验证，不能当作事实或已完成结果。
 - 只有真实执行并回读后才能报告完成或通过，区分失败、未执行、未验证和不适用；模拟与静态证据不冒充真实链路。纯文档、注释、规则或 skill 说明任务只编辑指定内容并回读，不因本 skill 的流程扩展为测试、构建、同步、打包或 OpenSpec 操作。
 
-覆盖驱动、ORM、查询正确性、连接池、迁移、分页、索引、读写分离与数据库测试。并发正确性（隔离级别、锁、分布式事务）见 go-data-consistency。代码遵循 use-modern-go，日志一律 `github.com/gtkit/logger/v2`。
+覆盖驱动、ORM、查询正确性、连接池、迁移、分页、索引、读写分离与数据库测试。并发正确性（隔离级别、锁、分布式事务）见 go-data-consistency。代码遵循 use-modern-go；日志沿用项目约定，本仓库默认示例采用 gtkit，适配边界见 go-observability。
 
 ## 核心规则
 
@@ -67,7 +67,7 @@ description: Go 数据访问层：database/sql、pgx、sqlx、sqlc、GORM 选型
 
 - ctx 取消时 `go-sql-driver/mysql` 关闭底层连接（`watchCancel` → `cleanup`），pgx 默认 `DeadlineContextWatcherHandler` 把 net.Conn deadline 置为当前时刻，连接同样报废。批量取消（客户端超时、上游熔断）会让池瞬间重建大量连接，MySQL 侧表现为 `Aborted_clients` 飙升。超时值要比 P99 有余量，不要贴着均值设。
 - `tx.Commit()` 返回 `context.Canceled`/`DeadlineExceeded` 时 DB 可能已提交：取消发生在 COMMIT 报文发出后。这类错误不能当"未提交"处理，靠幂等键或对账兜底（见 go-data-consistency）。
-- 写操作的 ctx 用 `context.WithoutCancel(reqCtx)` 加独立短超时：请求方断开不应让一半完成的写被打断。
+- 普通写操作默认传播请求 ctx，不为“让写入完成”一律脱离取消；是否继续由业务契约决定。已产生副作用后的必要收尾可按 `go-context` 脱离请求，但必须有独立上限与失败恢复；提交结果不明时不能据取消错误断言未提交。
 - DB 侧兜底：Postgres `statement_timeout`（会话/连接参数），MySQL `max_execution_time`（毫秒，仅 SELECT）；两者是最后一道防线，不替代 ctx。
 
 ## 索引与执行计划

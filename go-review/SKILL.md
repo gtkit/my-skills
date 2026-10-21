@@ -40,7 +40,7 @@ description: 审查 Go 代码：输入域枚举与调用方回审、并发/错�
 对 diff 中每个被新增或修改的函数，按以下四步执行，结果写进审查输出：
 
 1. **逐个入参枚举边界值**：空字符串、元字符（glob / 正则 / SQL / 路径中的 `..`）、nil 与 typed-nil（`var p *T; var i any = p` 时 `i != nil`）、零值、负值、极大值（`int` 溢出、`len` 上限）、重复值。问"这个参数的全部合法取值里，哪些会让当前实现出错"，不问"作者传的那个值能跑通吗"。
-2. **新失败模式回审全部调用方**：diff 引入了部分成功、新错误路径、新超时、新并发交错中的任何一种，就 `grep -rn "FuncName(" --include="*.go"` 找出全部调用方，逐个确认其错误分支是按"新世界"写的。旧调用方通常按"全成功或全失败"处理，遇到部分成功会把已写入的数据当作未写入。
+2. **新失败模式回审调用方**：diff 引入部分成功、新错误路径、新超时或新并发交错时，按 [代码导航参考](references/code-navigation.md) 组合实际可用的语义查询、`rg` 与源码追踪，记录覆盖范围与缺口，逐个确认错误分支。文本搜索命中不等于全部调用方；旧调用方可能把部分成功误当作未写入。
 3. **契约声明必须有反证测试**：注释或文档里出现"幂等""线程安全""最多执行一次""不阻塞""有界"等声明时，找对应的"若该声明为假就会失败"的测试；找不到，就把这条声明本身报为问题（置信度 ≥ 76），要求补测试或删声明。
 4. **改过的函数整段重读**：不只看 `+` 行。重读整个函数体与它的直接调用链，检查新增行是否改变了原有分支的前提（锁范围、defer 顺序、提前 return 跳过了清理）。
 
@@ -65,7 +65,7 @@ description: 审查 Go 代码：输入域枚举与调用方回审、并发/错�
 - `select` 的 `default` 分支是否造成忙轮询？
 
 **Context 传播：**
-- 是否用 `context.Background()` 替代了本该传入的 `ctx`？后台任务需要保留 value 时是否用 `context.WithoutCancel`？
+- 是否用 `context.Background()` 隐藏了已有 ctx 的取消？每次 `WithoutCancel` 是否符合 `go-context` 的业务契约，并设置独立 I/O 上限与任务退出路径？
 - context 是否被存进 struct 字段（应通过参数传递）？
 - `WithCancel` / `WithTimeout` 的 cancel 是否被调用（`go vet` 的 lostcancel）？
 - 测试中是否仍用 `context.Background()` 而非 `t.Context()`（Go 1.24+）？
@@ -77,7 +77,7 @@ description: 审查 Go 代码：输入域枚举与调用方回审、并发/错�
 - 哨兵比较是否用 `errors.Is`；类型匹配是否用 `errors.AsType[T]`（Go 1.26+）？
 - `defer f.Close()` 忽略的 error 在写文件场景是否会吞掉落盘失败？
 - library 代码是否 panic 而不是返回 error？`recover` 是否只在 goroutine 边界与 worker 内？
-- `context.Canceled` / `DeadlineExceeded` 是否被当成服务端错误记 ERROR 日志（应降为 WARN，HTTP 映射 499 / 504）？
+- 是否按 `go-context` 区分客户端取消、本服务预算耗尽和下游超时，并按项目契约映射响应与告警，而非把所有取消/超时一律降级或忽略？
 - 错误分类见 go-error-handling。
 
 #### 维度 3：资源管理
@@ -112,7 +112,7 @@ description: 审查 Go 代码：输入域枚举与调用方回审、并发/错�
 **结构组织：**
 - 是否有不必要的 `else`（提前 return 消除嵌套）？
 - `init()` 是否有隐藏副作用（连接外部服务、读环境变量）？
-- 导出函数是否返回未导出类型？参数是否用 `*zap.Logger` 之类具体日志类型（应用 gtkit logger 包级函数或接口）？
+- 导出函数是否返回未导出类型？日志依赖是否符合项目已确认的装配边界？只有采用 gtkit 的项目才按其包级函数约定审查，不因参考示例替换既有日志方案。
 
 #### 维度 6：生态库已知陷阱
 
@@ -244,6 +244,7 @@ description: 审查 Go 代码：输入域枚举与调用方回审、并发/错�
 | Gin API 模式 | go-gin-api |
 | 数据库操作 | go-database-patterns |
 | 并发模式 | go-concurrency |
+| context 传播、取消与有界收尾 | go-context |
 | Redis 客户端用法 | go-redis-patterns |
 | 缓存一致性、穿透 / 击穿 / 雪崩 | go-cache-consistency |
 | 事务隔离、Saga / outbox | go-data-consistency |

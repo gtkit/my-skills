@@ -13,7 +13,7 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 - 修改代码前先完成并落盘方案和逐步计划，写清范围、文件、兼容约束、风险、回滚和验收；只执行获准范围及阶段。计划、候选原因和未执行步骤标为待验证，不能当作事实或已完成结果。
 - 只有真实执行并回读后才能报告完成或通过，区分失败、未执行、未验证和不适用；模拟与静态证据不冒充真实链路。纯文档、注释、规则或 skill 说明任务只编辑指定内容并回读，不因本 skill 的流程扩展为测试、构建、同步、打包或 OpenSpec 操作。
 
-一个请求从入口到下游的"进程边界"问题：怎么停、怎么被探活、怎么防重放、怎么调别人。限流、熔断、重试、超时值怎么定归 go-stability-engineering；本文只放传播代码。
+一个请求从入口到下游的"进程边界"问题：怎么停、怎么被探活、怎么防重放、怎么调别人。context 的取消与有界收尾契约见 go-context；限流、熔断、重试、超时值怎么定归 go-stability-engineering；本文只放传播代码。
 
 ## 核心规则
 
@@ -56,7 +56,7 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 - [ ] SIGTERM 后第一步是 readiness 翻红；有 `preStop sleep`
 - [ ] WebSocket/SSE 连接有独立关闭路径（`RegisterOnShutdown` + hub）
 - [ ] `/livez` 无依赖检查；`/readyz` 每依赖独立超时，响应不含 `err.Error()`
-- [ ] 幂等：processing 返回 409，done 返回缓存结果；存储用 DB 唯一键
+- [ ] 幂等：processing 返回 409，done 返回缓存结果；存储用 DB 唯一键；必要的 Fail/Done 收尾使用已确认的独立正超时，失败可恢复
 - [ ] 每个下游一个复用的 `http.Client`；`MaxIdleConnsPerHost` 按并发设；Body 读尽再 Close
 - [ ] `http.NewRequestWithContext` 的 err 被检查；方法与状态码用常量
 - [ ] gRPC handler 出口统一 `ToStatus`；两端 keepalive 一起配；健康检查协议已注册

@@ -1,5 +1,7 @@
 # golangci-lint v2 配置
 
+下列 depguard 的日志禁用项适用于项目已采用本仓库 gtkit 默认方案时；目标项目已有其他日志或目录约定时，按该项目调整规则，不因复制示例禁用既有库或重排分层。下方“实测”沿用原有配置记录，本次仅补充适用说明，未重新执行。
+
 实测 `golangci-lint config verify` 通过；对 `import "log"`、`import "log/slog"`、repository 层 `import gin` 分别报 depguard，对 `f, _ := os.Open()` 报 errcheck。
 
 ```yaml

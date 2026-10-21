@@ -25,7 +25,7 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep"
 6. 以用户提供的 URL 发起出站请求必须走 SSRF 安全客户端：IP 校验放在 `DialContext`，不放在 URL 解析阶段。
 7. 不设 `X-XSS-Protection`；设 CSP、`X-Content-Type-Options: nosniff`、HSTS、`Referrer-Policy`；`Cache-Control: no-store` 只加在敏感接口。
 8. Cookie 会话必须 `SameSite=Lax/Strict` 并挂 CSRF 中间件（放行 `OPTIONS`）；纯 Bearer API 不挂。
-9. 安全随机数只用 `crypto/rand`；secret 用 `os.LookupEnv` 读取、缺失即 fail-fast；日志脱敏靠 gtkit `WithRedactKeys`。
+9. 安全随机数只用 `crypto/rand`；secret 用 `os.LookupEnv` 读取、缺失即 fail-fast；日志按项目方案脱敏，采用 gtkit 时以 `WithRedactKeys` 兜底，不因示例更换日志库。
 10. 5xx 不回显 `err.Error()`（见 go-error-handling）；登录、找回密码对"用户不存在"与"密码错误"返回同一状态码、同一文案、同一耗时量级。
 11. 每次 CI 跑 `govulncheck ./...`；金额字段 `int64`（分）或 decimal，禁 float。
 

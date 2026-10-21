@@ -93,5 +93,5 @@ var ParseFraction = parseFraction
 - [ ] 同一接口的多个实现跑同一套契约 suite
 - [ ] 时间相关逻辑用 synctest；包级 `goleak.VerifyTestMain` 或单测 `VerifyNone`
 - [ ] 每条"线程安全 / 幂等 / 有界"注释都能指向一个 `-race` 下运行的反证测试
-- [ ] 基准的数据准备在 `b.Loop()` 之外；对比用 `benchstat` 且 `-count ≥ 10`
+- [ ] 基准的数据准备在 `b.Loop()` 之外；按 go-performance 的参考记录工具版本、采样次数、环境和 benchstat 警告，不以固定样本数代替可信度判断
 - [ ] CI 命令含 `-race -shuffle=on -count=1 -covermode=atomic`

@@ -6,10 +6,11 @@
 
 ## 目录
 
-### 判断层（先读：怎么想、怎么选）
+### 判断与路由层（按任务选择）
 
 | skill | 内容 |
 |---|---|
+| `go-task-router` | Go 跨专题或入口不明确的任务分流：按解释、实现、审查、排障、性能与方案选择最小技能组合；不新增阶段或自动启动门禁 |
 | `senior-go-engineer` | Go 服务从需求到上线的决策框架：6 个必问数字、单体/模块化单体/微服务判定、分层与包设计、泛型边界、存储与缓存与 MQ 选型、分布式事务替代顺序、稳定性 4 问、容量与副本数 |
 | `tech-design-review` | 技术方案文档模板（含非目标、候选方案对比、失败模式、上线与回滚）、ADR 模板、容量估算公式、评审清单与否决项；语言无关 |
 | `senior-php-engineer` / `senior-python-engineer` / `senior-nodejs-engineer` / `senior-frontend-engineer` / `senior-rust-engineer` / `senior-lua-engineer` / `senior-openresty-engineer` / `senior-devops-engineer` | 各语言/领域的运行时行为、版本特性归属、生产事故高发点与选型判断；开头统一的"工作方式"段，其余全部是可证伪事实 |
@@ -38,6 +39,7 @@
 |---|---|
 | `go-gin-api` | Gin 服务骨架：`http.Server` 超时、优雅关闭、请求体限制、DTO 校验、JWT、CORS、幂等接口、`/livez` `/readyz`、handler 内异步的正确姿势 |
 | `go-error-handling` | `AppError`（`Error/Unwrap/Is`）、错误码分段、可重试分类、ctx 取消映射 499/504、跨服务错误映射、panic 边界、wrap 边界 |
+| `go-context` | context 的传播、deadline、取消原因、请求级 value、后台任务与有界收尾；区分普通请求、必要收尾和可靠异步任务 |
 | `go-concurrency` | 内存模型要点、goroutine 生命周期、有界并发三选一、worker pool、pipeline、singleflight、sync 原语适用条件、泄漏与死锁、`testing/synctest` |
 | `go-testing` | 表驱动 + `t.Parallel`、`cmp.Diff`、fake/stub/mock 取舍、契约测试、Gin handler 测试、testcontainers + 事务回滚、goleak、fuzz、golden、`b.Loop`、CI 参数 |
 | `go-database-patterns` | 驱动/ORM 选型、DSN 与连接池推导、查询正确性、GORM 陷阱、keyset 分页、索引与 EXPLAIN、大表变更、读写分离、ctx 与连接、建表规范 |
@@ -105,7 +107,8 @@
 
 ## 组合方式
 
-- 任何 Go 代码：`use-modern-go` 常驻；交付前验证走 `go-enterprise-quality`（按影响面分级；纯文档不触发，源码日志/错误文本修改才跑 build/vet）；审查走 `go-review`；架构与选型问题走 `senior-go-engineer`，方案文档走 `tech-design-review`；具体领域再叠加对应的 go-* 专项。
+- Go 任务入口或跨专题组合不明确时先走 `go-task-router`；已明确单一专项的直接进入专项，不预读整库。实际编写或审查 Go 代码按 `use-modern-go` 核对版本；交付前验证走 `go-enterprise-quality`（按影响面分级；纯文档不触发，源码日志/错误文本修改才跑 build/vet）；审查走 `go-review`；架构与选型问题走 `senior-go-engineer`，方案文档走 `tech-design-review`。
+- context 传播、取消、请求脱离与收尾边界统一走 `go-context`；goroutine 调度走 `go-concurrency`，deadline 传播实现走 `go-microservice`，预算数值走 `go-stability-engineering`。调用方定位由 `go-review/references/code-navigation.md` 提供共享指导，语义工具和文本搜索都须说明覆盖范围。
 - 前端开发走 `vue-frontend-engineer`（Vue 3 项目）或 `senior-frontend-engineer`（跨框架判断）；交付验收再走 `frontend-acceptance`。前端发现授权、事务、幂等或数据一致性问题时，升级到 `backend-acceptance`。
 - 后端交付验收优先走 `backend-acceptance`，再按语言和风险路由到 `go-review`、`go-enterprise-quality`、`go-testing`、`go-data-consistency`、`go-security`、`go-database-patterns`、`go-stability-engineering`、`go-microservice` 或对应的 `senior-*` skill。
 - Go/PHP/前端/OpenResty 的接口联调先走 `cross-stack-api-contract`；发布顺序、迁移、灰度或回滚走 `polyglot-release-engineering`；PHP 代码交付门禁走 `php-enterprise-quality`。
@@ -124,6 +127,7 @@
 - `polyglot-release-engineering` 负责跨栈发布编排，`senior-devops-engineer` 负责基础设施判断，`go-engineering-governance` 负责 Go 包和版本发布纪律。
 - `cross-stack-observability` 负责跨语言关联和证据，`go-observability` 负责 Go 的具体实现；`openresty-gateway-operations` 负责运行操作，OpenResty 两个现有 skill 负责 Lua/API 和架构。
 - `php-enterprise-quality` 负责 PHP 交付门禁，`senior-php-engineer` 负责运行时和 Laravel 判断；`polyglot-security-supply-chain` 负责供应链，语言安全实现仍路由到对应安全 skill。
+- `go-task-router` 只选择入口，不替代专项或强制加载所有技能；`go-context` 统一取消契约，不重复并发调度、预算计算或协议实现。语义导航先作为 `go-review` 的共享参考，暂不另建工具技能。
 
 ## 文件布局与描述规范
 
@@ -131,13 +135,13 @@
 - 内容多的 skill 拆成"路由 + references/"：`SKILL.md` 只放核心规则、判断表、审查清单与"按任务读取"路由表，代码模板与逐版本速查放 `references/*.md`，按路由表只读本次任务需要的文件。超过 250 行时优先评估拆分收益；只有实际按需加载能减少无关上下文才拆，不机械按行数拆分。
 - 同一条规则只在一处写全：审查四条（枚举输入域、回审调用方、契约反证、整段重读）完整版在 `go-review` 与 `go-enterprise-quality`，其他 skill 一句话引用。
 
-## 全仓公共约定
+## 通用原则与团队默认
 
-- 目标 Go 1.27；写法以 `use-modern-go` 为准。
-- 日志一律 `github.com/gtkit/logger/v2`（包级 `*Ctx` 函数），字段构造器用 `go.uber.org/zap`。
+- 本仓库默认目标 Go 1.27；实际项目先读 `go.mod` 与工具链政策，按项目声明版本使用 `use-modern-go`，不自动升级。
+- 本仓库团队默认与示例采用 `github.com/gtkit/logger/v2`（包级 `*Ctx` 函数、zap 字段）及 `go-error-handling` 的 AppError 模型。目标项目已有日志、错误码、响应结构和依赖装配时沿用它们；技能示例不授权迁移日志库、错误模型、目录或依赖方向。
 - `http.Server` 显式设置全部超时字段；`/livez` 不带依赖检查，`/readyz` 才带。
 - 哨兵错误用 `errors.Is`；5xx 不回显内部错误；金额用 `int64`（最小货币单位）或 decimal。
-- 新增或修改 Go 代码块要说明 Go 版本和独立模块 `go vet` 验证结果；验证模块不要求提交到 skill 仓库。带"实测"标注的断言必须有本机复现记录。
+- 新增或修改 Go 代码块要说明最低适用版本及证据状态。当前仅授权文档/skill 维护时只编辑并回读，未执行的编译、vet 与运行保持未验证；后续获准验证时记录独立模块、Go 版本、命令、退出码及结果。带“实测”标注的断言必须有对应复现记录，旧记录不能证明新片段已通过。
 
 ## 脚本
 
@@ -173,14 +177,14 @@ Windows 原生 PowerShell 对应 `./sync.ps1` 和 `./sync.ps1 go-review go-testi
 ## 维护入口
 
 - `AGENTS.md` 只记录修改分级、必读文件、校验命令和发布边界，不承载领域知识或动态状态。
-- `catalog.yaml` 记录 skill 的状态、适用平台、references 和 Codex UI 元数据；以各目录的 `SKILL.md` 为内容源。
+- `catalog.yaml` 记录 skill 的状态、适用平台、references 和 Codex UI 元数据；以各目录的 `SKILL.md` 为内容源。`active` 表示内容源启用，不等于已安装、自动发现已通过或稳定发布。
 - `evals/routing.md` 记录应触发、不应触发和边界场景；场景推演不等同于真实模型评测。
 - harness 的阶段依赖见 `harness-engineering/skills/harness-doctor/references/skill-dependencies.md`（位于相邻仓库）；doctor 区分文件存在、运行时可发现与本次已执行。安装状态不能代替门禁结果。
-- 改动 skill 前先运行 `pwsh -File scripts/validate.ps1`；修改触发语义、授权边界或跨 skill 路由时，先按 `evals/routing.md` 做静态推演，目标平台和工具可用时再做代表场景运行验证。
+- 维护按当前请求与全局规则确定边界：纯文档/skill 说明只编辑并回读，不自动运行脚本或评估。获准质量验证时使用 `pwsh -File scripts/validate.ps1`；路由、授权与跨 skill 语义的代表场景及自然语言评估方法见 `evals/routing.md`，未运行部分保持未验证。
 
 ## 维护规则
 
 - 单文件 ≤ 400 行；示例只保留说明问题所必需的部分。
 - 每条规则可证伪；版本相关事实标注版本；未核实的断言不写。
-- 新增或修改 Go 代码块时，先在独立模块里 `go vet` 通过，再粘贴进 SKILL.md。
+- 代码示例的编译与运行证据按上文记录；纯说明维护不启动额外验证，也不把回读写成测试通过。
 - 引用其他 skill 只用真实目录名。

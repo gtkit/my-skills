@@ -47,7 +47,7 @@ func current() (*Config, bool) {
 | `sync.Once` + 包装函数 / 缓存变量 | `sync.OnceFunc(f)` / `sync.OnceValue(f)` / `sync.OnceValues(f)`（f panic 时每次调用重放同一 panic） |
 | 起 goroutine 监听 `ctx.Done()` 做清理 | `stop := context.AfterFunc(ctx, cleanup)` |
 | `WithTimeout` 后只能拿到 `DeadlineExceeded` | `context.WithTimeoutCause(parent, d, err)` / `WithDeadlineCause` → `context.Cause(ctx)` 返回自定义原因 |
-| `context.Background()` 丢掉 value 起后台任务 | `context.WithoutCancel(parent)`：保留 value（trace_id 等），Done 为 nil、Err 恒为 nil |
+| 经契约允许脱离请求取消，且需保留请求 value | `context.WithoutCancel(parent)`：保留 value，移除 deadline 与取消；外部 I/O 再加独立上限，生命周期契约见 go-context |
 
 ```go
 var errAuditTimeout = errors.New("audit: timeout")

@@ -1,5 +1,7 @@
 # goroutine 生命周期与 context
 
+取消与脱离请求的统一契约见 `go-context`。下面的欢迎邮件是允许随进程退出而丢失的旁路示例，5 秒仅为示例预算；实际值与丢失语义必须由项目确认。必须可靠发送的邮件应使用持久化任务，不套用该 goroutine 示例。
+
 ```go
 // fetchAll：首个错误取消派生 ctx，其余 goroutine 通过 ctx 感知并退出；SetLimit 限并发。
 // Go 1.22 起循环变量每轮独立，不再需要 i, u := i, u。

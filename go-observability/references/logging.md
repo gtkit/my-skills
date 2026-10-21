@@ -1,5 +1,7 @@
 # 日志：gtkit/logger/v2
 
+以下是本仓库团队默认的 gtkit 参考，适用前提是项目已选择相应版本。已有 slog、zap 或其他日志契约的项目沿用原方案，实现同等的关联字段、脱敏与退出刷新；不照搬本例更换日志库。
+
 main 里初始化一次，`TraceFields` 同时负责 trace ↔ log 关联：
 
 ```go
@@ -67,6 +69,6 @@ func Init(production bool) func() {
 | `elapsed` | `zap.Duration`，默认编码为秒（浮点）；全仓统一，不混用毫秒整数 |
 | message | 固定文案（"order created"），变量全部进字段 |
 
-级别规则：ERROR 只给"当前请求确实失败且需要人处理"的事件，同一错误只在最外层记一次，内层 `return err` 透传；WARN 给降级已生效的情况（重试成功、fallback、慢 SQL、4xx）；`context.Canceled` / `DeadlineExceeded` 记 WARN 不记 ERROR（客户端走了不是服务故障）；INFO 是业务事件与每请求一条访问日志；DEBUG 线上关闭；FATAL 只在 main。
+级别规则沿用项目约定：同一错误只在最外层记一次，内层 `return err` 透传。gtkit 示例中 ERROR 用于请求失败，WARN 用于降级、慢 SQL 或业务拒绝；取消和超时按 go-context 核对来源，已确认的客户端主动取消与本服务/下游超时分别处理，不因错误类型一律降为 WARN 或排除 SLO 告警。INFO 用于业务事件与访问日志；DEBUG 的生产开关与 FATAL 的退出策略按项目进程生命周期确定。
 
 成本：每请求一条 300 字节的 INFO，1 万 QPS × 86400 秒 ≈ 260 GB/天（未压缩），留 30 天是 7.8 TB。所以访问日志 message 固定 + `WithSampling`，循环体内不记日志，请求 / 响应体不进生产日志。

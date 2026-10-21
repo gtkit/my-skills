@@ -23,7 +23,7 @@ description: 现代 Go 写法的单一真源（目标 Go 1.27）：每个旧写�
 1. 使用目标版本及以下的全部现代特性，不使用已有现代替代的旧写法。
 2. 不使用高于目标版本的特性；每条建议标注最低版本。
 3. 优先标准库 `slices` / `maps` / `cmp` / `iter`，不手写循环实现查找、拷贝、排序、去重。
-4. 日志使用 `github.com/gtkit/logger/v2`，字段构造器用 `go.uber.org/zap`（见 go-observability）。
+4. 日志是项目约定而非语言现代化规则：沿用项目已确认的方案，本仓库 gtkit 默认参考见 go-observability，不借现代化任务迁移日志库。
 5. review 或重构时主动指出可替换的旧模式，并说明替换后的行为差异（如 channel 容量、报错文本）。
 
 ## 各版本特性速查
@@ -64,7 +64,7 @@ description: 现代 Go 写法的单一真源（目标 Go 1.27）：每个旧写�
 9. `sql.NullString` 一族 → `sql.Null[T]`（1.22）；`append(append(a, b...), c...)` → `slices.Concat`（1.22）
 10. `for k := range m { keys = append(keys, k) }` + `sort` → `slices.Sorted(maps.Keys(m))`（1.23）；手写分批切片 → `slices.Chunk`（1.23）
 11. `time.After` / `time.Tick` 因"泄漏"被禁、`defer t.Stop()` 只为防泄漏、`if !t.Stop() { <-t.C }` 排空 → 1.23 起均不必要
-12. `context.Background()` 起后台任务丢 value → `context.WithoutCancel`（1.21）；`WithTimeout` 只能拿 `DeadlineExceeded` → `WithTimeoutCause` + `context.Cause`（1.21）
+12. 经契约允许脱离请求取消且需保留 value → `context.WithoutCancel`（1.21）并设置独立 I/O 上限（见 go-context）；需记录超时原因 → `WithTimeoutCause` + `context.Cause`（1.21）
 13. 测试内 `context.Background()` → `t.Context()`；`os.Chdir` + 手动还原 → `t.Chdir`（1.24）
 14. `for i := 0; i < b.N; i++` → `for b.Loop()`；防优化 sink 变量 → 删除（1.24）
 15. `strings.Split` + `for range` → `strings.SplitSeq` / `FieldsSeq` / `Lines`（1.24）
@@ -81,4 +81,4 @@ description: 现代 Go 写法的单一真源（目标 Go 1.27）：每个旧写�
 26. 需要严格 JSON 语义（拒绝重复键 / 大小写敏感 / 非法 UTF-8）→ `encoding/json/v2`（1.27），并核对 nil slice 编码差异
 27. `httptest.NewServer` + `defer Close()` → `httptest.NewTestServer(t, h)`（1.27）；手写 `*url.URL` 复制 → `URL.Clone`（1.27）
 28. `signal.Notify` + 手写退出 select → `signal.NotifyContext`（1.16）
-29. 日志出现标准库 `log` 或非 gtkit 方案 → `github.com/gtkit/logger/v2` + `zap` 字段（见 go-observability）
+29. 日志方案与目标项目已确认约定不一致 → 按项目契约适配；gtkit 是本仓库团队默认参考，不是所有 Go 项目的强制替换项（见 go-observability）

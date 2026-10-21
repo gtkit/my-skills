@@ -1,5 +1,7 @@
 # Gin 错误中间件与跨服务映射
 
+沿用原有 Go 1.27 参考片段，本次文档修订未编译或运行。下列代码采用本仓库 AppError/gtkit 方案，并约定 499 表示已确认的客户端取消；其他项目按现有错误、日志与取消来源契约适配，不直接替换响应结构。504 仍保留为服务或下游超时故障的候选，不能仅按状态码排除 SLO 告警。
+
 ## Gin 错误中间件：ctx 取消、request_id、不回显
 
 ```go
@@ -23,8 +25,8 @@ func Errors() gin.HandlerFunc {
 		ae := apperror.From(err)
 		fields := []zap.Field{zap.Int("code", ae.Code), zap.Int("status", ae.HTTP), zap.Error(err)}
 		switch {
-		case ae.HTTP == apperror.StatusClientClosedRequest || ae.HTTP == http.StatusGatewayTimeout:
-			logger.WarnCtx(ctx, "request aborted", fields...) // 客户端断开/超时是噪音，不进 ERROR 告警
+		case ae.HTTP == apperror.StatusClientClosedRequest:
+			logger.WarnCtx(ctx, "request aborted", fields...) // 适用前提：项目已确认该分类代表客户端取消
 		case ae.HTTP >= http.StatusInternalServerError:
 			logger.ErrorCtx(ctx, "request failed", fields...)
 		default:

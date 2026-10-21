@@ -1,5 +1,7 @@
 # gRPC 基础
 
+下面的日志使用本仓库 gtkit 参考。沿用原有 Go 1.27 片段，本次文档修订未编译或运行；项目须先区分客户端取消、服务主动取消和超时来源，再确定日志与 SLO 计数。示例按已确认的客户端取消处理 `Canceled`，`DeadlineExceeded` 保留 ERROR，不能把所有超时当作调用方噪音。
+
 ```go
 // UnaryLogging 记录每个 RPC 的方法、耗时、状态码。metrics 在同一位置打点（见 go-observability）。
 func UnaryLogging() grpc.UnaryServerInterceptor {
@@ -15,8 +17,8 @@ func UnaryLogging() grpc.UnaryServerInterceptor {
 		switch code {
 		case codes.OK:
 			logger.InfoCtx(ctx, "rpc", fields...)
-		case codes.Canceled, codes.DeadlineExceeded, codes.InvalidArgument, codes.NotFound:
-			logger.WarnCtx(ctx, "rpc", fields...) // 调用方问题或调用方放弃，不是本服务故障
+		case codes.Canceled, codes.InvalidArgument, codes.NotFound:
+			logger.WarnCtx(ctx, "rpc", fields...) // 示例分类；是否属于服务故障仍按项目契约与来源判断
 		default:
 			logger.ErrorCtx(ctx, "rpc", append(fields, zap.Error(err))...)
 		}

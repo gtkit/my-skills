@@ -4,6 +4,10 @@
 
 这个 `Store` 是**通用应用层幂等**：`fn` 的业务写入与 `Done` 是两次独立提交，两者之间有窗口——业务已落库而 `Done` 失败时记录停在 processing，靠过期接管重做，调用方拿到的错误不代表"未执行"。窗口只能消除、不能靠这个接口收窄：业务写入与幂等键在同一个库时，把 `INSERT idempotency_key` 放进业务事务本身，唯一键冲突即重复，此时不需要 processing 态、也不需要 `Done`（实现见 go-data-consistency）。跨库或写入在下游服务时才用本接口，并接受"可重入"这个前提。
 
+取消与收尾契约见 `go-context`。下面是 Go 1.21+ 的示意片段，本次文档修订未编译或运行；`cleanupTimeout` 是调用方根据项目契约提供的正收尾预算，无默认值，不得直接作为未验证的项目实现。`Store.Fail/Done` 的实现还须遵守 ctx 取消，timeout 本身不能强制中断忽略 ctx 的存储调用。
+
+示例仅在 `fn` 返回 error 能确认本次业务失败时调用 `Fail`；若提交结果不明或已有部分副作用，不得据 error 删除占位以允许盲目重做，应按项目状态机保留记录并恢复或对账。
+
 ```go
 var ErrInProgress = errors.New("idempotent request in progress")
 
@@ -19,7 +23,10 @@ type Store interface {
 }
 
 // Execute 是幂等执行的唯一入口：processing 返回 ErrInProgress（HTTP 409），done 返回缓存结果。
-func Execute(ctx context.Context, st Store, key string, fn func(ctx context.Context) ([]byte, error)) ([]byte, error) {
+func Execute(ctx context.Context, st Store, key string, cleanupTimeout time.Duration, fn func(ctx context.Context) ([]byte, error)) ([]byte, error) {
+	if cleanupTimeout <= 0 {
+		return nil, errors.New("cleanup timeout must be positive")
+	}
 	state, cached, err := st.Begin(ctx, key)
 	if err != nil {
 		return nil, err
@@ -31,14 +38,16 @@ func Execute(ctx context.Context, st Store, key string, fn func(ctx context.Cont
 		return nil, ErrInProgress // 绝不能 return nil：那是把"别人正在做"报告成"已成功"
 	}
 	result, err := fn(ctx)
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	defer cancel()
 	if err != nil {
-		if ferr := st.Fail(context.WithoutCancel(ctx), key); ferr != nil {
+		if ferr := st.Fail(cleanupCtx, key); ferr != nil {
 			return nil, errors.Join(err, ferr)
 		}
 		return nil, err
 	}
-	// Done 同样用 WithoutCancel：fn 已产生副作用，客户端此刻断开不能让记录卡在 processing。
-	if err := st.Done(context.WithoutCancel(ctx), key, result); err != nil {
+	// fn 已产生副作用：Done 使用独立收尾预算；失败仍需状态恢复或对账。
+	if err := st.Done(cleanupCtx, key, result); err != nil {
 		return nil, err
 	}
 	return result, nil

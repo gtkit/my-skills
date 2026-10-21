@@ -28,7 +28,7 @@ description: Go 架构判断与方案取舍：必问的容量数字、单体与�
 6. 分布式事务的处理顺序固定为：合到同一个库 → 异步最终一致（outbox / 本地消息表）→ Saga → TCC；只有前一项不可行才考虑下一项。
 7. 容量先估算再压测再定副本数；没有单机容量基线的副本数是猜的。
 8. `/livez` 只检查进程存活，`/readyz` 才检查依赖；把 DB 探测放进 liveness，DB 抖动会让 kubelet 重启全部副本。
-9. 日志一律 `github.com/gtkit/logger/v2`，调用点用 `logger.InfoCtx(ctx, ...)` 等带 ctx 的包级函数；不用 `log`、`log/slog`，不把 `*zap.Logger` 当参数传递。
+9. 日志、错误模型、目录与依赖方向沿用项目已确认的约定。本仓库团队默认采用 gtkit 与 AppError；gtkit 项目使用带 ctx 的包级函数，不因本 skill 迁移其他日志方案或重排项目结构。
 10. 金额用 `int64`（最小货币单位）或 decimal，数据库列不用 float / double。
 11. 写代码遵守 `use-modern-go`；审查按 `go-review`；自查按本文"代码审查与自查"四条。
 
@@ -146,7 +146,7 @@ pprof、逃逸分析、GC 调优、PGO 收益见 `go-performance`；PGO 与 CI �
 
 ## 日志与现代写法
 
-- 日志：`github.com/gtkit/logger/v2`，`main` 里 `logger.SetDefault(logger.MustNew(...))` 一次，调用点 `logger.InfoCtx` / `WarnCtx` / `ErrorCtx`，`trace_id` 通过 `logger.WithContextFields` 注入；初始化与中间件见 `go-observability`。
+- 日志：沿用项目约定；采用本仓库 gtkit 默认方案时，`main` 里 `logger.SetDefault(logger.MustNew(...))` 一次，调用点用 `*Ctx`，`trace_id` 通过 `logger.WithContextFields` 注入；适配边界、初始化与中间件见 `go-observability`。
 - 现代写法：`any`、`for i := range n`、`for b.Loop()`、`t.Context()`、`wg.Go()`、`errors.Is` / `errors.AsType[T]`、`slices` / `maps`、`strings.SplitSeq`、`omitzero`、`math/rand/v2`、`signal.NotifyContext`、`context.WithoutCancel`——版本归属与替换清单见 `use-modern-go`。
 
 ## 常见"资深味"错误判断
@@ -169,6 +169,8 @@ pprof、逃逸分析、GC 调优、PGO 收益见 `go-performance`；PGO 与 CI �
 | 什么时候读 | 读哪个 |
 |---|---|
 | 写任何 Go 代码之前 | use-modern-go |
+| 跨专题任务的主入口与最小技能组合不明确 | go-task-router |
+| context 传播、取消、脱离请求与有界收尾 | go-context |
 | 写技术方案、ADR、做容量估算、评审别人的方案 | tech-design-review |
 | 审查 Go 代码 / diff / PR | go-review |
 | 提交前的质量门禁与多维测试 | go-enterprise-quality |

@@ -70,4 +70,4 @@ func BenchmarkParseAmount(b *testing.B) {
 }
 ```
 
-对比：`go test -bench . -benchmem -count 10 > new.txt` 后 `benchstat old.txt new.txt`；`count < 10` 时置信区间不可信。基准不与 `-race` 同跑。
+对比方法与固定工具版本见 [Benchmark 共享参考](../../go-performance/references/benchmark.md)。每组从 10 次采样开始，依据波动、效应大小和 benchstat 警告决定是否增加；不能以“少于 10 次”一概断言区间不可信，也不能以达到次数保证可信。基准不与 `-race` 同跑。
