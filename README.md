@@ -6,37 +6,30 @@
 
 ## 目录
 
-### 判断与路由层（按任务选择）
+按语言和领域选择技能；每个技能只归入一个主分类，跨领域组合见下方“组合方式”。本节用于查找，技能目录继续保持根目录平铺，沿用现有技能名称、同步和打包方式。
+
+`catalog.yaml` 的顶层 `categories` 定义分类标识与名称。按维护约定，每个 `skills[]` 条目必填一个 `category`，取下表标识，不设默认分类；新增技能或调整归属时，同步本节与分类元数据。分类用于导航与维护，沿用现有加载、同步和打包方式。
+
+| 分类 | category 标识 | 范围 |
+|---|---|---|
+| [Go](#go) | `go` | 任务路由、架构判断、现代写法、专项模式、审查与质量门禁 |
+| [PHP 与 Laravel](#php-与-laravel) | `php` | PHP 语法、Laravel 运行时与交付质量 |
+| [前端与设计](#前端与设计) | `frontend` | Vue、跨框架前端工程、界面设计与前端验收 |
+| [OpenResty 与 Lua](#openresty-与-lua) | `openresty-lua` | ngx_lua、网关运行操作与纯 Lua/LuaJIT |
+| [其他语言](#其他语言) | `other-languages` | Python、Node.js 服务端与 Rust |
+| [通用工程](#通用工程) | `general` | 方案评审、代码简化、后端验收、Shell 与运维 |
+| [跨栈工程](#跨栈工程) | `cross-stack` | API 契约、发布、事故响应、可观测性、安全、测试、升级、性能与异步任务 |
+| [流程工具](#流程工具) | `workflow` | 基于文件的任务规划与进度记录 |
+
+### Go
 
 | skill | 内容 |
 |---|---|
 | `go-task-router` | Go 跨专题或入口不明确的任务分流：按解释、实现、审查、排障、性能与方案选择最小技能组合；不新增阶段或自动启动门禁 |
 | `senior-go-engineer` | Go 服务从需求到上线的决策框架：6 个必问数字、单体/模块化单体/微服务判定、分层与包设计、泛型边界、存储与缓存与 MQ 选型、分布式事务替代顺序、稳定性 4 问、容量与副本数 |
-| `tech-design-review` | 技术方案文档模板（含非目标、候选方案对比、失败模式、上线与回滚）、ADR 模板、容量估算公式、评审清单与否决项；语言无关 |
-| `senior-php-engineer` / `senior-python-engineer` / `senior-nodejs-engineer` / `senior-frontend-engineer` / `senior-rust-engineer` / `senior-lua-engineer` / `senior-openresty-engineer` / `senior-devops-engineer` | 各语言/领域的运行时行为、版本特性归属、生产事故高发点与选型判断；开头统一的"工作方式"段，其余全部是可证伪事实 |
-
-### 开发与交付门禁层
-
-| skill | 内容 |
-|---|---|
-| `vue-frontend-engineer` | Vue 3 + JavaScript/TypeScript 的生产开发工作流：组件、路由、状态、API 适配、异步竞态、令牌刷新、表单、测试、安全、性能与可访问性；不替代前端验收 |
-| `frontend-acceptance` | 前端项目证据化验收：需求追踪、浏览器行为、API 契约、权限/租户、数据一致性、安全、性能、可访问性和准入报告；构建/截图不等于通过 |
-| `backend-acceptance` | Go/PHP/Node.js 等后端的生产风险审计：业务规则来源、调用链、不变量、事务、幂等、并发、权限、安全、索引、容量、失败补偿与证据门禁 |
-
-### 规范层（写任何代码前生效）
-
-| skill | 内容 |
-|---|---|
 | `use-modern-go` | 现代 Go 写法的单一真源：Go 1.0–1.27 每个"旧写法 → 现代写法"条目标注版本并经 `go doc` 核实；其他 Go skill 只引用它 |
-| `use-modern-php` | PHP 8.0–8.5 语法与运行时特性，附实测报错原文 |
 | `go-review` | Go 代码审查：输入域枚举与调用方回审 → 七维度审查 → 置信度过滤 → 输出格式；生态库（GORM/Gin/go-redis/gobreaker/gorilla）已知陷阱 |
 | `go-enterprise-quality` | 写/改 Go 代码时的门禁流程：build / vet / lint / govulncheck / `-race` 测试、调用方影响分析、契约声明必配反证测试 |
-| `code-simplifier` | 代码简化：行为等价性验证步骤、性能特征变化提醒、不动的边界（并发、金融精度、错误路径、安全校验） |
-
-### Go 专项模式层（做具体事时读）
-
-| skill | 内容 |
-|---|---|
 | `go-gin-api` | Gin 服务骨架：`http.Server` 超时、优雅关闭、请求体限制、DTO 校验、JWT、CORS、幂等接口、`/livez` `/readyz`、handler 内异步的正确姿势 |
 | `go-cobra` | Cobra 命令树、参数与 flags、父子 hook、context、错误/输出、补全与命令测试；不默认搭配 Viper |
 | `go-viper` | Viper 来源优先级、flag/env 绑定、结构体解码、配置校验、重载与实例隔离；评估请求不自动引入依赖 |
@@ -58,30 +51,23 @@
 | `go-websocket-sse` | WS/SSE/长轮询选型、单读单写规则、纯 actor Hub、优雅关闭、背压策略、水平扩展、连接数预算、SSE `Last-Event-ID` 补发 |
 | `go-engineering-governance` | `.golangci.yml`（v2）、CI 门禁流水线、依赖治理、`apidiff` 与兼容性、按项目版本政策阻断破坏性发布、PGO 流程、项目布局 |
 
-### 其他语言/领域专项
+### PHP 与 Laravel
 
 | skill | 内容 |
 |---|---|
-| `openresty-patterns` | ngx_lua 各阶段 API 可用性、shared dict 真实行为、三级缓存与击穿防护、cosocket 连接池、`ngx.re`、cjson、timer、阻塞排查——全部本机实测 |
-| `shell-scripting` | Bash 脚本骨架、`set -e` 失效点、引用与数组、trap 与信号、getopts、锁与超时、macOS/BSD 与 GNU 差异、bash 3.2 兼容 |
-
-### 跨栈交付与生产 SOP
-
-| skill | 内容 |
-|---|---|
-| `cross-stack-api-contract` | Go/PHP、gRPC/gateway 与客户端的契约、proto-first/OpenAPI/JSON Schema、错误、分页、鉴权、兼容性和生成测试；不替代实现或最终验收。 |
-| `polyglot-release-engineering` | Go、PHP-FPM/Octane、前端资产和 OpenResty 的统一发布、数据库 expand/contract、灰度、缓存、健康检查和回滚。 |
+| `senior-php-engineer` | PHP/Laravel 工程判断：PHP-FPM/OPcache/Octane 运行时、队列与事务锁、Eloquent 性能、安全、慢请求与超卖排查 |
+| `use-modern-php` | PHP 8.0–8.5 语法与运行时特性，附实测报错原文 |
 | `php-enterprise-quality` | PHP/Laravel 的 PHPUnit/Pest、PHPStan/Psalm、Pint、Composer、迁移、队列和 CI 质量门禁。 |
-| `incident-response` | 浏览器、网关、PHP-FPM、Go、Redis、数据库的事故分级、止损、证据链、回滚、降级和复盘。 |
-| `cross-stack-observability` | OpenResty、PHP、Go、浏览器间的 request ID、trace context、日志字段、脱敏、指标、采样和告警验证。 |
-| `openresty-gateway-operations` | OpenResty/Nginx 配置检查、upstream、超时、缓存、限流、长连接、证书、reload、流量切换和回滚。 |
-| `polyglot-security-supply-chain` | Go/PHP/npm 依赖、CVE、SBOM、secret、SAST/DAST、镜像和许可证治理。 |
-| `polyglot-test-engineering` | 跨栈测试层次、契约/集成/E2E/故障注入、测试数据、flaky 管理和证据要求。 |
-| `runtime-upgrade-migration` | Go、PHP/Laravel、Vue/Node、OpenResty 的版本升级、兼容矩阵、分阶段迁移和回滚。 |
-| `fullstack-performance` | 浏览器到网关、PHP/Go、Redis、数据库和 MQ 的性能预算、基线、压测、定位和容量评估。 |
-| `async-job-contracts` | Laravel Queue、Go MQ 和跨语言事件的 schema 版本、投递语义、幂等、重试、DLQ、顺序和回放。 |
 
-### 第三方前端设计技能
+### 前端与设计
+
+| skill | 内容 |
+|---|---|
+| `senior-frontend-engineer` | 跨框架前端工程判断：Core Web Vitals、React/Vue 渲染与水合、现代 CSS、Vite 构建与包体、安全和可访问性；Node 服务端由对应技能负责 |
+| `vue-frontend-engineer` | Vue 3 + JavaScript/TypeScript 的生产开发工作流：组件、路由、状态、API 适配、异步竞态、令牌刷新、表单、测试、安全、性能与可访问性；不替代前端验收 |
+| `frontend-acceptance` | 前端项目证据化验收：需求追踪、浏览器行为、API 契约、权限/租户、数据一致性、安全、性能、可访问性和准入报告；构建/截图不等于通过 |
+
+#### 第三方设计技能
 
 以下目录保留上游固定提交的原始内容、许可证及已有作者声明；本仓库新增的 `UPSTREAM.md` 记录来源、提交、导入日期和本地包装差异，不改写上游 `SKILL.md` 或调用策略。
 
@@ -94,6 +80,47 @@
 `high-end-visual-design` 保留上游显式调用策略，使用 `$high-end-visual-design` 指定。三个技能沿用现有单向同步：先维护本仓库，再执行 `./sync.sh frontend-design anti-ui-slop high-end-visual-design` 安装到 `~/.agents/skills`。上游更新应按明确提交重新导入，并同步更新来源记录；不从安装副本反向覆盖上游记录。
 
 为保持原文，`frontend-design` 和 `anti-ui-slop` 的描述保留超过本仓库 150 字符约定的上游长度。现有 `scripts/validate.ps1` 没有第三方豁免，按其当前规则这两项会报描述长度错误；该差异不代表已通过全仓校验。
+
+### OpenResty 与 Lua
+
+| skill | 内容 |
+|---|---|
+| `senior-openresty-engineer` | OpenResty/ngx_lua 工程决策：阶段与 API 边界、timer/worker 模型、出站方式、shared dict、balancer 重试、超时、连接池与热更新 |
+| `openresty-patterns` | ngx_lua 各阶段 API 可用性、shared dict 真实行为、三级缓存与击穿防护、cosocket 连接池、`ngx.re`、cjson、timer、阻塞排查——全部本机实测 |
+| `openresty-gateway-operations` | OpenResty/Nginx 配置检查、upstream、超时、缓存、限流、长连接、证书、reload、流量切换和回滚。 |
+| `senior-lua-engineer` | 纯 Lua/LuaJIT 工程判断：版本语义差异、table 边界、整数浮点、GC、FFI、沙箱和 Redis EVAL；Nginx 内 Lua 按 OpenResty 技能处理 |
+
+### 其他语言
+
+| skill | 内容 |
+|---|---|
+| `senior-python-engineer` | Python 工程判断：GIL 与 free-threading、asyncio、FastAPI/Django、SQLAlchemy async、打包分发、类型、lint 与安全 |
+| `senior-nodejs-engineer` | Node.js 服务端工程判断：进程生命周期、ESM/CJS、事件循环与内存、Fastify/Express/NestJS、流与背压、事务和 npm 发包安全 |
+| `senior-rust-engineer` | Rust 工程判断：所有权与生命周期、async/tokio 取消安全、内存序、错误边界、2024 edition、unsafe、Axum/sqlx 与 cargo 治理 |
+
+### 通用工程
+
+| skill | 内容 |
+|---|---|
+| `tech-design-review` | 技术方案文档模板（含非目标、候选方案对比、失败模式、上线与回滚）、ADR 模板、容量估算公式、评审清单与否决项；语言无关 |
+| `code-simplifier` | 代码简化：行为等价性验证步骤、性能特征变化提醒、不动的边界（并发、金融精度、错误路径、安全校验） |
+| `backend-acceptance` | Go/PHP/Node.js 等后端的生产风险审计：业务规则来源、调用链、不变量、事务、幂等、并发、权限、安全、索引、容量、失败补偿与证据门禁 |
+| `shell-scripting` | Bash 脚本骨架、`set -e` 失效点、引用与数组、trap 与信号、getopts、锁与超时、macOS/BSD 与 GNU 差异、bash 3.2 兼容 |
+| `senior-devops-engineer` | 运维/SRE 工程判断：Linux 内核参数、容器与 cgroup、Kubernetes、发布策略、Prometheus 告警、SLO、事故复盘与云成本 |
+
+### 跨栈工程
+
+| skill | 内容 |
+|---|---|
+| `cross-stack-api-contract` | Go/PHP、gRPC/gateway 与客户端的契约、proto-first/OpenAPI/JSON Schema、错误、分页、鉴权、兼容性和生成测试；不替代实现或最终验收。 |
+| `polyglot-release-engineering` | Go、PHP-FPM/Octane、前端资产和 OpenResty 的统一发布、数据库 expand/contract、灰度、缓存、健康检查和回滚。 |
+| `incident-response` | 浏览器、网关、PHP-FPM、Go、Redis、数据库的事故分级、止损、证据链、回滚、降级和复盘。 |
+| `cross-stack-observability` | OpenResty、PHP、Go、浏览器间的 request ID、trace context、日志字段、脱敏、指标、采样和告警验证。 |
+| `polyglot-security-supply-chain` | Go/PHP/npm 依赖、CVE、SBOM、secret、SAST/DAST、镜像和许可证治理。 |
+| `polyglot-test-engineering` | 跨栈测试层次、契约/集成/E2E/故障注入、测试数据、flaky 管理和证据要求。 |
+| `runtime-upgrade-migration` | Go、PHP/Laravel、Vue/Node、OpenResty 的版本升级、兼容矩阵、分阶段迁移和回滚。 |
+| `fullstack-performance` | 浏览器到网关、PHP/Go、Redis、数据库和 MQ 的性能预算、基线、压测、定位和容量评估。 |
+| `async-job-contracts` | Laravel Queue、Go MQ 和跨语言事件的 schema 版本、投递语义、幂等、重试、DLQ、顺序和回放。 |
 
 ### 流程工具
 
@@ -181,7 +208,7 @@ Windows 原生 PowerShell 对应 `./sync.ps1` 和 `./sync.ps1 go-review go-testi
 ## 维护入口
 
 - `AGENTS.md` 只记录修改分级、必读文件、校验命令和发布边界，不承载领域知识或动态状态。
-- `catalog.yaml` 记录 skill 的状态、适用平台、references 和 Codex UI 元数据；以各目录的 `SKILL.md` 为内容源。`active` 表示内容源启用，不等于已安装、自动发现已通过或稳定发布。
+- `catalog.yaml` 记录 `categories` 分类定义、各 skill 的 `category` 主分类、状态、适用平台、references 和 Codex UI 元数据；技能正文与触发描述以各目录的 `SKILL.md` 为内容源，分类元数据在 catalog 中维护并与本页导航一致。`active` 表示内容源启用，不等于已安装、自动发现已通过或稳定发布。
 - `evals/routing.md` 记录应触发、不应触发和边界场景；场景推演不等同于真实模型评测。
 - harness 的阶段依赖见 `harness-engineering/skills/harness-doctor/references/skill-dependencies.md`（位于相邻仓库）；doctor 区分文件存在、运行时可发现与本次已执行。安装状态不能代替门禁结果。
 - 维护按当前请求与全局规则确定边界：纯文档/skill 说明只编辑并回读，不自动运行脚本或评估。获准质量验证时使用 `pwsh -File scripts/validate.ps1`；路由、授权与跨 skill 语义的代表场景及自然语言评估方法见 `evals/routing.md`，未运行部分保持未验证。
