@@ -31,6 +31,7 @@
 | `go-review` | Go 代码审查：输入域枚举与调用方回审 → 七维度审查 → 置信度过滤 → 输出格式；生态库（GORM/Gin/go-redis/gobreaker/gorilla）已知陷阱 |
 | `go-enterprise-quality` | 写/改 Go 代码时的门禁流程：build / vet / lint / govulncheck / `-race` 测试、调用方影响分析、契约声明必配反证测试 |
 | `go-gin-api` | Gin 服务骨架：`http.Server` 超时、优雅关闭、请求体限制、DTO 校验、JWT、CORS、幂等接口、`/livez` `/readyz`、handler 内异步的正确姿势 |
+| `kratos-skills` | go-kratos 项目开发、审查、排障与迁移：以已核实的 v3 稳定版为基线，覆盖 Proto/Buf、HTTP/gRPC、slog/OTel、校验、Wire 和生命周期；保留现有项目版本与架构 |
 | `go-cobra` | Cobra 命令树、参数与 flags、父子 hook、context、错误/输出、补全与命令测试；不默认搭配 Viper |
 | `go-viper` | Viper 来源优先级、flag/env 绑定、结构体解码、配置校验、重载与实例隔离；评估请求不自动引入依赖 |
 | `go-lo` | samber/lo 集合、查找、条件与指针工具的 nil、顺序、重复 key、别名、错误与子包边界；不批量替换循环 |
@@ -140,6 +141,7 @@
 - Go 任务入口或跨专题组合不明确时先走 `go-task-router`；已明确单一专项的直接进入专项，不预读整库。实际编写或审查 Go 代码按 `use-modern-go` 核对版本；交付前验证走 `go-enterprise-quality`（按影响面分级；纯文档不触发，源码日志/错误文本修改才跑 build/vet）；审查走 `go-review`；架构与选型问题走 `senior-go-engineer`，方案文档走 `tech-design-review`。
 - context 传播、取消、请求脱离与收尾边界统一走 `go-context`；goroutine 调度走 `go-concurrency`，deadline 传播实现走 `go-microservice`，预算数值走 `go-stability-engineering`。调用方定位由 `go-review/references/code-navigation.md` 提供共享指导，语义工具和文本搜索都须说明覆盖范围。
 - Cobra 命令行任务直接走 `go-cobra`，只有涉及 Viper 配置绑定/解析时追加 `go-viper`；Viper 可独立用于服务配置。使用或审查 samber/lo 时选 `go-lo`，不因普通 Go 实现任务加载这三项或自动引入依赖。
+- go-kratos 框架集成使用 `kratos-skills`，按需补充现有 Go 专项；v3 的 JSON、slog、JWT/OTel 与生成器按对应版本核对，不因技能示例升级已有项目、替换日志库或强制迁入模板分层。Ory Kratos 身份系统不适用。
 - 前端开发走 `vue-frontend-engineer`（Vue 3 项目）或 `senior-frontend-engineer`（跨框架判断）；交付验收再走 `frontend-acceptance`。前端发现授权、事务、幂等或数据一致性问题时，升级到 `backend-acceptance`。
 - 后端交付验收优先走 `backend-acceptance`，再按语言和风险路由到 `go-review`、`go-enterprise-quality`、`go-testing`、`go-data-consistency`、`go-security`、`go-database-patterns`、`go-stability-engineering`、`go-microservice` 或对应的 `senior-*` skill。
 - Go/PHP/前端/OpenResty 的接口联调先走 `cross-stack-api-contract`；发布顺序、迁移、灰度或回滚走 `polyglot-release-engineering`；PHP 代码交付门禁走 `php-enterprise-quality`。

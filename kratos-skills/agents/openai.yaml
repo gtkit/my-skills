@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kratos 项目工程"
+  short_description: "Kratos v3 开发：协议生成、slog、双协议服务与版本迁移"
+  default_prompt: "使用 $kratos-skills，先核对当前项目的 Kratos 与 Go 版本，再按现有架构完成本次开发、审查或排障任务。"

@@ -13,6 +13,19 @@ categories:
   cross-stack: 跨栈工程
   workflow: 流程工具
 skills:
+  - name: kratos-skills
+    category: go
+    status: active
+    platforms: [codex]
+    description: "用于 go-kratos（Kratos）项目的开发、审查、排障与版本迁移，覆盖 HTTP/gRPC、Proto/Buf、依赖注入和运行生命周期；以最新稳定版为基线，沿用现有项目版本。非 Ory Kratos。"
+    ui_metadata: true
+    references:
+      - references/version-and-generation.md
+      - references/architecture-and-data.md
+      - references/transport-and-contracts.md
+      - references/runtime-and-troubleshooting.md
+    templates: []
+    scripts: []
   - name: backend-acceptance
     category: general
     status: active
