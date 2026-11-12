@@ -14,12 +14,23 @@ description: 用 Gin 写生产级 REST API：http.Server 超时与优雅关闭�
 
 Gin 服务的骨架与中间件参考。业务错误与日志沿用目标项目已确认的契约；以下示例采用 go-error-handling 的 `apperror.*AppError` 与 `ginmw.Errors()`，不要求其他项目替换既有模型。本文件不再重复定义该示例类型。
 
+## Gin 框架原生写法（强制）
+
+- **只要项目使用 Gin，路由、handler、中间件、参数绑定、校验、上下文和响应处理就必须遵守 Gin 的公开 API、调用语义及项目已经确认的惯例。** 禁止凭个人偏好绕开框架、照搬其他框架的处理方式，或给单个接口另造一套绑定流程。标准库和第三方组件用于 Gin 未承担的职责，不代表可以替换已有的 Gin 请求处理链。
+- 写前实际读取项目锁定的 Gin 版本、模块替换及有关构建标签，同模块 handler、请求 DTO、统一响应工具、中间件和适用 Guide。API 与边界行为按该版本源码或官方资料核实；不能用其他版本的印象作依据，也不能把本 skill 的示例函数、目录或错误模型强加给已有项目。
+- **普通结构化请求在 handler 直接使用与输入来源匹配的 `ShouldBind*`。** JSON 用 `ShouldBindJSON`，仅 query 用 `ShouldBindQuery`，路径参数用 `ShouldBindUri`，header 用 `ShouldBindHeader`，表单按实际契约使用 `ShouldBind` 或原生指定 binder。完整选择表见 [请求与校验](references/request.md)。禁止先 `ReadAll`、手工拆 Content-Type、`json.Unmarshal`，再逐字段检查来替代原生绑定。
+- 基础必填、长度、格式和范围约束写入独立请求 DTO 的 `binding` 标签，字段来源使用相应的 `json`、`form`、`uri`、`header` 标签；业务状态、权限和数据库相关规则留在 application/service。缺失、零值、空字符串与 `null` 的区别以接口契约为准，不自行增加字段限制。
+- 有统一错误响应的项目使用 `ShouldBind*` 返回错误，再交给已有错误出口并结束当前分支。`Bind*`/`MustBind*` 有自动写出错误状态及中断链的语义，不能与二次错误响应混用。响应复用项目已有、符合 Gin 语义的工具；`c.Abort()` 不会退出当前函数，拒绝分支仍须 `return`。下游 I/O 使用 `c.Request.Context()`，不向 application/service 传递 `*gin.Context`。
+- **不得把自定义 `Bind`、`ParseRequest`、`binding.Binding` 实现或新的校验封装设为默认入口。** 已有 helper 只有在职责清楚、没有绕开原生绑定或破坏错误语义时才复用；用户指出过度复杂后，必须重新检查并删除不必要流程，不能只将其搬到另一函数或文件。
+- 原始字节验签、流式请求、文件或特殊协议确有需求时，先核实已确认契约和 Gin 原生支持。原生能力不能满足时，写清差异、证据、影响与最小适配方案；新增自定义解析器或绑定器须经用户明确认可。保留已确认的限长、鉴权、脱敏和失败处理，不能为简化而删掉，也不能自己发明额外约束来证明复杂实现必要。
+- 以上规则适用于当前获准的实现和审查范围；只要求保存规则或修改 skill 说明时，仅编辑并回读，不继续业务代码、测试、构建或 OpenSpec。
+
 ## 核心规则
 
 1. `gin.New()` 自建中间件栈；`gin.Default()` 的 Logger/Recovery 写 stdout、不带 request_id、不判 `Written()`。
 2. 必须 `r.SetTrustedProxies(...)`：gin 1.12 默认信任 `0.0.0.0/0, ::/0`，任何客户端可用 `X-Forwarded-For` 伪造 `ClientIP()`，限流与审计全部失真。
 3. `http.Server` 四个超时字段全部显式设置（`r.Run()` 等于零超时裸奔，slowloris 打穿）；`signal.NotifyContext` + `srv.Shutdown(ctx)`，Shutdown 超时 < k8s `terminationGracePeriodSeconds`。
-4. 每个请求体经 `http.MaxBytesReader` 限制（只看 `Content-Length` 挡不住 chunked）；绑定到独立 DTO（``Email string `json:"email" binding:"required,email"` ``），禁止绑到 GORM model；校验错误字段名经 `RegisterTagNameFunc` 映射为 json 名；绑定错误不回显 `err.Error()`。
+4. 每个请求体经 `http.MaxBytesReader` 限制（只看 `Content-Length` 挡不住 chunked）；用 Gin 原生方法绑定到独立 DTO（``Email string `json:"email" binding:"required,email"` ``），禁止绑到 GORM model。校验错误字段名按实际输入来源映射，优先复用已有工具；只有确有需要才通过 Gin 的 validator 扩展点注册，不为每个接口另建校验器。绑定错误不回显 `err.Error()`。
 5. `context.WithTimeout` 不会中断 handler，只让传了 ctx 的下游调用返回；路由级超时用 `gin-contrib/timeout`，且 handler 内所有 IO 必须传 `c.Request.Context()`。
 6. handler 内异步：`cp := c.Copy()` + `context.WithoutCancel(c.Request.Context())`，优先投队列。`go func(){ use(c) }()` 读到的是被复用的 Context。
 7. `/livez` 无依赖检查，`/readyz` 才检查依赖，每个依赖 2s 超时；pprof/metrics 只监听本机独立端口；`gin.SetMode(gin.ReleaseMode)`。
@@ -46,7 +57,7 @@ internal/middleware/ pkg/response/  本文件的中间件；成功响应结构
 
 ## 请求体限制与路由超时
 
-`BodyLimit(maxBytes)` 中间件：`c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)`。超限时 Read 返回 `*http.MaxBytesError`（`dto.Bind` 映射为 413），且服务器在响应后关闭连接；上传路由单独放宽并设 `r.MaxMultipartMemory`。
+`BodyLimit(maxBytes)` 中间件：`c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)`。超限时 Read 返回 `*http.MaxBytesError`；`ShouldBind*` 返回的错误由项目已有错误出口识别并映射为 413，具体错误传播还须核对所用 JSON 实现。上传路由按契约设置独立上限与 `r.MaxMultipartMemory`，内存阈值不代替请求体大小限制。
 
 `RouteTimeout(d)` = `timeout.New(timeout.WithTimeout(d), timeout.WithResponse(func(c *gin.Context) { c.JSON(http.StatusGatewayTimeout, ginmw.ErrorBody{Code: apperror.CodeTimeout, Message: apperror.ErrTimeout.Message}) }))`。gin-contrib/timeout v1.2.1 给 `c.Request.Context()` 设 deadline、把 handler 放到独立 goroutine，超时后丢弃其后续写入，但会**等 handler 返回**才结束——handler 的 IO 不传 ctx 时，超时只缩短了客户端等待，没释放任何资源。取舍：`http.TimeoutHandler` 包整个 engine、固定回 503、不支持 Flusher（SSE 全废）；显式 `select { case <-ctx.Done(): case res := <-ch: }` 只适合单个慢调用；三者都无法真正终止 handler 的 goroutine，唯一能释放资源的是 handler 尊重 ctx。
 
@@ -85,8 +96,9 @@ func FireAndForget(c *gin.Context, do func(ctx context.Context, cp *gin.Context)
 - [ ] `gin.New()`、`SetMode(ReleaseMode)`、`SetTrustedProxies` 为真实 LB 网段
 - [ ] `http.Server` 的 `ReadHeaderTimeout/ReadTimeout/WriteTimeout/IdleTimeout/MaxHeaderBytes` 全部设置
 - [ ] `signal.NotifyContext` + `Shutdown`，超时 < `terminationGracePeriodSeconds`
-- [ ] 所有 handler 绑定到 DTO；`SetupValidator` 在启动时调用并检查返回值
-- [ ] 错误出口只有 `ginmw.Fail`；无 `c.JSON(500, err.Error())`
+- [ ] 已核对 Gin 版本、同模块 handler、DTO、响应工具和中间件；所有结构化输入使用来源匹配的原生绑定与 `binding` 标签
+- [ ] 没有擅自新增手工解码、自定义 binder 或单次封装；确需的适配有契约证据与明确授权，保留原有安全约束
+- [ ] 错误使用项目已有统一出口（本 skill 示例为 `ginmw.Fail`）；无原始错误泄漏、重复写响应或拒绝后继续执行业务；确需的 validator 注册在启动时完成并检查错误
 - [ ] 路由组挂 `RouteTimeout`；handler 内每个 IO 都传 `c.Request.Context()`
 - [ ] 无 `go func(){ ... c ... }()`；异步走队列或 `FireAndForget`
 - [ ] JWT：`WithValidMethods`、`WithLeeway`、`WithExpirationRequired`、`CutPrefix` 检查 `Bearer `；CORS 白名单，无 `*` + `Authorization` 组合

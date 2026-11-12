@@ -123,8 +123,10 @@ description: 审查 Go 代码：输入域枚举与调用方回审、并发/错�
 - 排序字段 / 列名是否来自用户输入且未走白名单？N+1 是否用 `Preload` / `Joins`？
 
 **Gin：**
-- `ShouldBind*` 后是否检查 error？是否绑到独立 DTO 而非 GORM model？
-- `c.JSON` / `c.AbortWithStatusJSON` 之后是否缺 `return`？middleware 是否调用了 `c.Next()` 或 `c.Abort()`？
+- 先核对锁定的 Gin 版本、同模块 handler、DTO、响应工具和中间件；按 [Gin 原生写法](../go-gin-api/SKILL.md) 审查，不能用个人习惯或其他框架模板替代。
+- 是否按 JSON/query/path/header/form 的实际来源直接使用相应 `ShouldBind*`、检查错误，并通过独立 DTO 的来源标签和 `binding` 标签表达基础校验？是否无依据地手工读取/解码、逐字段校验或新建自定义 binder？确需适配时是否有契约证据与明确授权？
+- 是否混用会自动写出错误的 `Bind*`/`MustBind*` 和统一错误响应，导致重复写出？需要结束当前函数时是否 `return`？中间件拒绝请求是否停止后续链？`c.Abort()` 不等于函数返回，`c.JSON()` 不等于中断链；不能机械要求每个中间件都调用 `c.Next()`。
+- 用户要求改回框架惯例后，是否只把复杂解析搬进 helper 而未消除？是否擅自新增输入限制，或为了简化删掉已确认的限长、鉴权、脱敏和兼容约束？
 - 5xx 响应是否回显了 `err.Error()`（泄漏内部信息）？错误响应是否带 `request_id`？
 - goroutine 中是否直接使用 `*gin.Context`（须 `c.Copy()`，并用 `context.WithoutCancel(c.Request.Context())`）？
 - 是否设置了 `SetTrustedProxies`、`http.MaxBytesReader`？
